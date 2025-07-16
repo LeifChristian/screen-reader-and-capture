@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 dotenv.config();
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const INTERVAL_MS = 30 * 1000; // 30 seconds between captures
+const INTERVAL_MS = 60 * 1000; // 30 seconds between captures
 const SESSION_ID = uuidv4();
 const SESSION_DIR = path.join(process.cwd(), 'sessions', SESSION_ID);
 const SCREENSHOTS_DIR = path.join(SESSION_DIR, 'screenshots');
@@ -53,7 +53,7 @@ fs.writeFileSync(sessionLogPath, `Screen Narrator Session - ${new Date().toISOSt
 function speakText(text) {
     return new Promise((resolve, reject) => {
         if (process.platform === 'win32') {
-            say.speak(text, 'Microsoft Zira Desktop', 1.0, (err) => {
+            say.speak(text, 'Microsoft Zira Desktop', 1.3, (err) => {
                 if (err) {
                     logger.error(`TTS Error: ${err.message}`);
                     reject(err);
@@ -64,7 +64,7 @@ function speakText(text) {
             });
         } else {
             // For macOS/Linux
-            say.speak(text, null, 1.0, (err) => {
+            say.speak(text, null, 1.3, (err) => {
                 if (err) {
                     logger.error(`TTS Error: ${err.message}`);
                     reject(err);

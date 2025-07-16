@@ -99,7 +99,7 @@ Default: 30 seconds (for testing)
 To modify, edit `INTERVAL_MS` in `capture.js`:
 
 ```javascript
-const INTERVAL_MS = 30 * 1000; // 30 seconds
+const INTERVAL_MS = 60 * 1000; // 30 seconds
 ```
 
 ## 🔊 Sound Requirements
