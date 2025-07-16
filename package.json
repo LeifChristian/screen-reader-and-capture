@@ -8,11 +8,14 @@
   },
   "type": "module",
   "dependencies": {
+    "archiver": "^6.0.2",
     "dotenv": "^16.3.1",
     "node-fetch": "^3.3.2",
+    "say": "^0.16.0",
     "screenshot-desktop": "^1.15.0",
-    "winston": "^3.11.0",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.6",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "electron": "^29.1.0"

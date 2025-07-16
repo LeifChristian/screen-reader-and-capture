@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Screen Narrator Dashboard</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f0f0f0;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #2196f3;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+      }
+
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .pulse {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #4caf50;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+      }
+
+      button {
+        background-color: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+      }
+
+      .captures-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .capture-entry {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+      }
+
+      .capture-entry.latest {
+        border-left: 4px solid #4caf50;
+      }
+
+      .capture-image {
+        flex-shrink: 0;
+        width: 300px;
+        height: 200px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #ddd;
+      }
+
+      .capture-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .capture-content {
+        flex-grow: 1;
+      }
+
+      .capture-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+
+      .capture-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .capture-time {
+        font-size: 14px;
+        color: #666;
+      }
+
+      .capture-description {
+        font-size: 16px;
+        line-height: 1.5;
+        color: #444;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #2196f3;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+      }
+
+      .empty-state h3 {
+        margin-bottom: 10px;
+        color: #999;
+      }
+
+      .session-info {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .session-info h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+      }
+
+      .session-stats {
+        display: flex;
+        gap: 20px;
+        font-size: 14px;
+        color: #666;
+      }
+
+      .speaking-indicator {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        color: #ff9800;
+        font-weight: bold;
+      }
+
+      .speaking-indicator.active {
+        display: flex;
+      }
+
+      .sound-waves {
+        display: flex;
+        gap: 2px;
+      }
+
+      .sound-wave {
+        width: 3px;
+        height: 15px;
+        background: #ff9800;
+        animation: wave 1s infinite;
+      }
+
+      .sound-wave:nth-child(2) {
+        animation-delay: 0.1s;
+      }
+      .sound-wave:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      .sound-wave:nth-child(4) {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes wave {
+        0%,
+        100% {
+          height: 15px;
+        }
+        50% {
+          height: 5px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🎙️ Screen Narrator</h1>
+        <p>AI-powered live screen description with conversation history</p>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-indicator">
+          <div class="pulse"></div>
+          <span>Narrator Active</span>
+          <div class="speaking-indicator" id="speakingIndicator">
+            <div class="sound-waves">
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+            </div>
+            <span>Speaking...</span>
+          </div>
+        </div>
+        <div class="controls">
+          <button onclick="exportText()">📝 Export Text</button>
+          <button onclick="exportFull()">📦 Export Full</button>
+          <button onclick="clearSession()">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="session-info">
+        <h4>Session Information</h4>
+        <div class="session-stats">
+          <span>Session ID: <strong id="sessionId">Loading...</strong></span>
+          <span>Captures: <strong id="captureCount">0</strong></span>
+          <span>Started: <strong id="sessionStart">Loading...</strong></span>
+        </div>
+      </div>
+
+      <div class="captures-container" id="capturesContainer">
+        <div class="empty-state">
+          <h3>🔄 Initializing Screen Narrator...</h3>
+          <p>The first capture will appear here shortly</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      let sessionData = null;
+      let captures = [];
+
+      // Initialize the dashboard
+      async function initDashboard() {
+        try {
+          sessionData = await ipcRenderer.invoke("get-session-data");
+          updateSessionInfo();
+          updateCapturesDisplay();
+        } catch (error) {
+          console.error("Failed to load session data:", error);
+        }
+      }
+
+      // Update session information
+      function updateSessionInfo() {
+        if (!sessionData) return;
+
+        document.getElementById("sessionId").textContent =
+          sessionData.sessionId.substring(0, 8);
+        document.getElementById("captureCount").textContent =
+          sessionData.captureCount;
+        document.getElementById("sessionStart").textContent =
+          new Date().toLocaleTimeString();
+      }
+
+      // Update captures display
+      function updateCapturesDisplay() {
+        const container = document.getElementById("capturesContainer");
+
+        if (!sessionData || sessionData.conversationHistory.length === 0) {
+          container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>🔄 Waiting for first capture...</h3>
+                        <p>The narrator will capture and describe your screen every 30 seconds</p>
+                    </div>
+                `;
+          return;
+        }
+
+        container.innerHTML = "";
+
+        // Display captures in reverse order (newest first)
+        const sortedCaptures = [...sessionData.conversationHistory].reverse();
+
+        sortedCaptures.forEach((capture, index) => {
+          const isLatest = index === 0;
+          const captureElement = createCaptureElement(capture, isLatest);
+          container.appendChild(captureElement);
+        });
+      }
+
+      // Create a capture element
+      function createCaptureElement(capture, isLatest) {
+        const div = document.createElement("div");
+        div.className = `capture-entry ${isLatest ? "latest" : ""}`;
+
+        const imageUrl = `file://${capture.path}`;
+        const timestamp = new Date(capture.timestamp).toLocaleString();
+
+        div.innerHTML = `
+                <div class="capture-image">
+                    <img src="${imageUrl}" alt="Capture ${capture.captureNumber}" />
+                </div>
+                <div class="capture-content">
+                    <div class="capture-header">
+                        <div class="capture-title">Capture ${capture.captureNumber}</div>
+                        <div class="capture-time">${timestamp}</div>
+                    </div>
+                    <div class="capture-description">${capture.description}</div>
+                </div>
+            `;
+
+        return div;
+      }
+
+      // Listen for new captures
+      ipcRenderer.on("new-capture", (event, capture) => {
+        if (!sessionData) sessionData = { conversationHistory: [] };
+
+        sessionData.conversationHistory.push(capture);
+        sessionData.captureCount = capture.captureNumber;
+
+        updateSessionInfo();
+        updateCapturesDisplay();
+
+        // Show speaking indicator
+        showSpeakingIndicator();
+      });
+
+      // Show speaking indicator
+      function showSpeakingIndicator() {
+        const indicator = document.getElementById("speakingIndicator");
+        indicator.classList.add("active");
+
+        // Hide after 5 seconds (approximate TTS duration)
+        setTimeout(() => {
+          indicator.classList.remove("active");
+        }, 5000);
+      }
+
+      // Export functions
+      async function exportText() {
+        try {
+          const result = await ipcRenderer.invoke("export-session", false);
+          alert(`Text exported successfully to: ${result}`);
+        } catch (error) {
+          alert(`Export failed: ${error.message}`);
+        }
+      }
+
+      async function exportFull() {
+        try {
+          const result = await ipcRenderer.invoke("export-session", true);
+          alert(`Full session exported successfully to: ${result}`);
+        } catch (error) {
+          alert(`Export failed: ${error.message}`);
+        }
+      }
+
+      function clearSession() {
+        if (
+          confirm(
+            "Are you sure you want to clear the current session? This cannot be undone."
+          )
+        ) {
+          sessionData = { conversationHistory: [], captureCount: 0 };
+          updateCapturesDisplay();
+          updateSessionInfo();
+        }
+      }
+
+      // Initialize when page loads
+      document.addEventListener("DOMContentLoaded", initDashboard);
+
+      // Refresh session data every 30 seconds
+      setInterval(async () => {
+        try {
+          sessionData = await ipcRenderer.invoke("get-session-data");
+          updateSessionInfo();
+        } catch (error) {
+          console.error("Failed to refresh session data:", error);
+        }
+      }, 30000);
+    </script>
+  </body>
+</html>
