@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Queue Watcher Dashboard</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .status-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #4caf50;
+        margin-right: 8px;
+      }
+
+      .queue-number {
+        font-size: 3em;
+        font-weight: bold;
+        color: #2196f3;
+        text-align: center;
+        margin: 20px 0;
+      }
+
+      .alert-zone {
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+      }
+
+      .alert-zone.danger {
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+      }
+
+      .log-section {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .log-entry {
+        border-bottom: 1px solid #eee;
+        padding: 10px 0;
+        font-size: 0.9em;
+      }
+
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+
+      .timestamp {
+        color: #666;
+        font-size: 0.8em;
+      }
+
+      .alert-badge {
+        background-color: #dc3545;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7em;
+        margin-left: 10px;
+      }
+
+      button {
+        background-color: #2196f3;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 5px;
+      }
+
+      button:hover {
+        background-color: #1976d2;
+      }
+
+      .controls {
+        text-align: center;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🔍 Queue Watcher Dashboard</h1>
+        <p>Monitoring your queue position in real-time</p>
+      </div>
+
+      <div class="status-card">
+        <h3><span class="status-indicator"></span>Status: Running</h3>
+        <div class="queue-number" id="queueNumber">--</div>
+        <div style="text-align: center">
+          <p>Current Queue Position</p>
+          <p>
+            <small>Last checked: <span id="lastChecked">--</span></small>
+          </p>
+        </div>
+      </div>
+
+      <div class="alert-zone" id="alertZone" style="display: none">
+        <h4>🚨 Alert Settings</h4>
+        <p>
+          Notifications will be triggered when your queue position reaches:
+          <strong>10, 9, 8, 5</strong>
+        </p>
+        <p>Sound file: <code>sound.wav</code></p>
+      </div>
+
+      <div class="log-section">
+        <h3>Recent Queue Log</h3>
+        <div id="logEntries">
+          <div class="log-entry">
+            <span class="timestamp">Application started</span><br />
+            Monitoring will begin shortly...
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button onclick="testSound()">🔊 Test Sound</button>
+        <button onclick="checkNow()">🔄 Check Now</button>
+        <button onclick="clearLogs()">🗑️ Clear Logs</button>
+      </div>
+    </div>
+
+    <script>
+      // Mock functions for now - these would need to be connected to the backend
+      function testSound() {
+        console.log("Testing sound...");
+        // This would trigger the sound test
+      }
+
+      function checkNow() {
+        console.log("Checking queue now...");
+        // This would trigger an immediate queue check
+      }
+
+      function clearLogs() {
+        document.getElementById("logEntries").innerHTML =
+          '<div class="log-entry"><span class="timestamp">Logs cleared</span><br>Ready for new entries...</div>';
+      }
+
+      // Update last checked time
+      function updateLastChecked() {
+        document.getElementById("lastChecked").textContent =
+          new Date().toLocaleTimeString();
+      }
+
+      // Show alert zone
+      document.getElementById("alertZone").style.display = "block";
+
+      // Update last checked time every 30 seconds
+      setInterval(updateLastChecked, 30000);
+      updateLastChecked();
+    </script>
+  </body>
+</html>

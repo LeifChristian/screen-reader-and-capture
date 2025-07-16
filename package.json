@@ -1,0 +1,20 @@
+{
+  "name": "electron-queue-watcher",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "setup": "node setup.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2",
+    "screenshot-desktop": "^1.15.0",
+    "winston": "^3.11.0",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "electron": "^29.1.0"
+  }
+}
