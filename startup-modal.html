@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Screen Narrator - Setup</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .modal {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 24px 38px rgba(0, 0, 0, 0.14),
+          0 9px 46px rgba(0, 0, 0, 0.12), 0 11px 15px rgba(0, 0, 0, 0.2);
+        width: 500px;
+        max-width: 90vw;
+        padding: 0;
+        animation: modalSlideIn 0.3s ease-out;
+      }
+
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-50px) scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 24px;
+        border-radius: 12px 12px 0 0;
+        text-align: center;
+      }
+
+      .modal-header h2 {
+        font-size: 24px;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .modal-header p {
+        opacity: 0.9;
+        font-size: 14px;
+      }
+
+      .modal-body {
+        padding: 32px 24px;
+      }
+
+      .mode-selection {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .mode-card {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .mode-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+      }
+
+      .mode-card.selected {
+        border-color: #667eea;
+        background: rgba(102, 126, 234, 0.05);
+      }
+
+      .mode-card .radio {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #ccc;
+        border-radius: 50%;
+        background: white;
+      }
+
+      .mode-card.selected .radio {
+        border-color: #667eea;
+      }
+
+      .mode-card.selected .radio::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        background: #667eea;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .mode-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .mode-description {
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .notification-prompt {
+        display: none;
+        margin-top: 16px;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+      }
+
+      .notification-prompt.show {
+        display: block;
+      }
+
+      .form-group {
+        margin-bottom: 16px;
+      }
+
+      .form-group label {
+        display: block;
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .form-group textarea {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+        resize: vertical;
+        min-height: 80px;
+        transition: border-color 0.2s ease;
+      }
+
+      .form-group textarea:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .form-group .hint {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+      }
+
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
+      .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 80px;
+      }
+
+      .btn-secondary {
+        background: #f5f5f5;
+        color: #666;
+      }
+
+      .btn-secondary:hover {
+        background: #e0e0e0;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .example-prompts {
+        margin-top: 12px;
+        padding: 12px;
+        background: #e8f4fd;
+        border-radius: 6px;
+        border-left: 4px solid #2196f3;
+      }
+
+      .example-prompts h4 {
+        font-size: 13px;
+        color: #1976d2;
+        margin-bottom: 8px;
+      }
+
+      .example-prompts ul {
+        list-style: none;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .example-prompts li {
+        margin-bottom: 4px;
+        padding-left: 16px;
+        position: relative;
+      }
+
+      .example-prompts li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        color: #2196f3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🎙️ Screen Narrator Setup</h2>
+        <p>Choose your monitoring mode to get started</p>
+      </div>
+
+      <div class="modal-body">
+        <div class="mode-selection">
+          <div
+            class="mode-card"
+            data-mode="checkin"
+            onclick="selectMode('checkin')"
+          >
+            <div class="radio"></div>
+            <div class="mode-title">🔄 Check-in Mode</div>
+            <div class="mode-description">
+              Continuously narrates what's on your screen at regular intervals.
+              Perfect for staying aware of your current activity and context.
+            </div>
+          </div>
+
+          <div
+            class="mode-card"
+            data-mode="notification"
+            onclick="selectMode('notification')"
+          >
+            <div class="radio"></div>
+            <div class="mode-title">🚨 Notification Mode</div>
+            <div class="mode-description">
+              Monitors your screen for specific content you define. Plays an
+              alarm and describes what it found when your target appears.
+            </div>
+          </div>
+        </div>
+
+        <div class="notification-prompt" id="notificationPrompt">
+          <div class="form-group">
+            <label for="searchPrompt">What should I look for?</label>
+            <textarea
+              id="searchPrompt"
+              placeholder="Describe what you want to be notified about..."
+              maxlength="200"
+            ></textarea>
+            <div class="hint">
+              Be specific about what you want to detect (e.g., "a queue number
+              below 10", "an email from John", "a red error message")
+            </div>
+          </div>
+
+          <div class="example-prompts">
+            <h4>Example Prompts:</h4>
+            <ul>
+              <li>"A queue number that shows 10 or lower"</li>
+              <li>"An email notification from my boss"</li>
+              <li>"A red error message or warning dialog"</li>
+              <li>"A meeting notification or calendar alert"</li>
+              <li>"A stock price that drops below $50"</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="window.close()">
+          Cancel
+        </button>
+        <button
+          class="btn btn-primary"
+          id="startBtn"
+          onclick="startApp()"
+          disabled
+        >
+          Start Monitoring
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      let selectedMode = null;
+
+      function selectMode(mode) {
+        selectedMode = mode;
+
+        // Update UI
+        document.querySelectorAll(".mode-card").forEach((card) => {
+          card.classList.remove("selected");
+        });
+        document
+          .querySelector(`[data-mode="${mode}"]`)
+          .classList.add("selected");
+
+        // Show/hide notification prompt
+        const notificationPrompt =
+          document.getElementById("notificationPrompt");
+        if (mode === "notification") {
+          notificationPrompt.classList.add("show");
+        } else {
+          notificationPrompt.classList.remove("show");
+        }
+
+        // Enable start button
+        updateStartButton();
+      }
+
+      function updateStartButton() {
+        const startBtn = document.getElementById("startBtn");
+        const searchPrompt = document
+          .getElementById("searchPrompt")
+          .value.trim();
+
+        if (selectedMode === "checkin") {
+          startBtn.disabled = false;
+        } else if (selectedMode === "notification") {
+          startBtn.disabled = searchPrompt.length < 10;
+        } else {
+          startBtn.disabled = true;
+        }
+      }
+
+      function startApp() {
+        const config = {
+          mode: selectedMode,
+          searchPrompt:
+            selectedMode === "notification"
+              ? document.getElementById("searchPrompt").value.trim()
+              : null,
+        };
+
+        // Send config to main process
+        ipcRenderer.send("start-app-with-config", config);
+
+        // Close modal
+        window.close();
+      }
+
+      // Listen for search prompt changes
+      document
+        .getElementById("searchPrompt")
+        .addEventListener("input", updateStartButton);
+
+      // Auto-focus and select checkin mode by default
+      document.addEventListener("DOMContentLoaded", () => {
+        selectMode("checkin");
+      });
+
+      // Handle escape key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          window.close();
+        }
+      });
+    </script>
+  </body>
+</html>

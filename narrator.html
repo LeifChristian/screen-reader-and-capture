@@ -100,6 +100,61 @@
         border-left: 4px solid #4caf50;
       }
 
+      .capture-entry.alarm {
+        border-left: 4px solid #f44336;
+        background: rgba(244, 67, 54, 0.05);
+      }
+
+      .capture-entry.alarm .capture-title {
+        color: #f44336;
+      }
+
+      .capture-entry.alarm .capture-title::before {
+        content: "🚨 ";
+      }
+
+      .alarm-badge {
+        background: #f44336;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 8px;
+      }
+
+      .mode-indicator {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 10px;
+      }
+
+      .mode-indicator.checkin {
+        background: #2196f3;
+        color: white;
+      }
+
+      .mode-indicator.notification {
+        background: #ff9800;
+        color: white;
+      }
+
+      .search-prompt {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 20px;
+        font-size: 14px;
+      }
+
+      .search-prompt strong {
+        color: #856404;
+      }
+
       .capture-image {
         flex-shrink: 0;
         width: 300px;
@@ -234,6 +289,7 @@
         <div class="status-indicator">
           <div class="pulse"></div>
           <span>Narrator Active</span>
+          <span class="mode-indicator" id="modeIndicator">Loading...</span>
           <div class="speaking-indicator" id="speakingIndicator">
             <div class="sound-waves">
               <div class="sound-wave"></div>
@@ -251,11 +307,16 @@
         </div>
       </div>
 
+      <div class="search-prompt" id="searchPrompt" style="display: none">
+        <strong>Monitoring for:</strong> <span id="searchText">Loading...</span>
+      </div>
+
       <div class="session-info">
         <h4>Session Information</h4>
         <div class="session-stats">
           <span>Session ID: <strong id="sessionId">Loading...</strong></span>
           <span>Captures: <strong id="captureCount">0</strong></span>
+          <span>Alarms: <strong id="alarmCount">0</strong></span>
           <span>Started: <strong id="sessionStart">Loading...</strong></span>
         </div>
       </div>
@@ -295,6 +356,31 @@
           sessionData.captureCount;
         document.getElementById("sessionStart").textContent =
           new Date().toLocaleTimeString();
+
+        // Update mode indicator
+        const modeIndicator = document.getElementById("modeIndicator");
+        if (sessionData.mode === "notification") {
+          modeIndicator.textContent = "Notification Mode";
+          modeIndicator.className = "mode-indicator notification";
+
+          // Show search prompt
+          const searchPrompt = document.getElementById("searchPrompt");
+          const searchText = document.getElementById("searchText");
+          searchPrompt.style.display = "block";
+          searchText.textContent = sessionData.searchPrompt || "Loading...";
+        } else {
+          modeIndicator.textContent = "Check-in Mode";
+          modeIndicator.className = "mode-indicator checkin";
+
+          // Hide search prompt
+          document.getElementById("searchPrompt").style.display = "none";
+        }
+
+        // Count alarms
+        const alarmCount = sessionData.conversationHistory.filter(
+          (entry) => entry.isAlarm
+        ).length;
+        document.getElementById("alarmCount").textContent = alarmCount;
       }
 
       // Update captures display
@@ -302,10 +388,15 @@
         const container = document.getElementById("capturesContainer");
 
         if (!sessionData || sessionData.conversationHistory.length === 0) {
+          const modeText =
+            sessionData?.mode === "notification"
+              ? "monitoring for your specified content"
+              : "capture and describe your screen every 60 seconds";
+
           container.innerHTML = `
                     <div class="empty-state">
                         <h3>🔄 Waiting for first capture...</h3>
-                        <p>The narrator will capture and describe your screen every 30 seconds</p>
+                        <p>The narrator will ${modeText}</p>
                     </div>
                 `;
           return;
@@ -326,10 +417,23 @@
       // Create a capture element
       function createCaptureElement(capture, isLatest) {
         const div = document.createElement("div");
-        div.className = `capture-entry ${isLatest ? "latest" : ""}`;
+        let className = `capture-entry ${isLatest ? "latest" : ""}`;
+        if (capture.isAlarm) {
+          className += " alarm";
+        }
+        div.className = className;
 
         const imageUrl = `file://${capture.path}`;
         const timestamp = new Date(capture.timestamp).toLocaleString();
+
+        // Clean description (remove ${ALARM} markers)
+        const cleanDescription = capture.description
+          .replace(/\$\{ALARM\}/g, "")
+          .trim();
+
+        const alarmBadge = capture.isAlarm
+          ? '<span class="alarm-badge">ALARM</span>'
+          : "";
 
         div.innerHTML = `
                 <div class="capture-image">
@@ -337,10 +441,10 @@
                 </div>
                 <div class="capture-content">
                     <div class="capture-header">
-                        <div class="capture-title">Capture ${capture.captureNumber}</div>
+                        <div class="capture-title">Capture ${capture.captureNumber}${alarmBadge}</div>
                         <div class="capture-time">${timestamp}</div>
                     </div>
-                    <div class="capture-description">${capture.description}</div>
+                    <div class="capture-description">${cleanDescription}</div>
                 </div>
             `;
 

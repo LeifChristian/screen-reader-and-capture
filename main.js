@@ -1,11 +1,39 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } from 'electron';
 import path from 'path';
-import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData } from './screen-narrator.js';
+import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig } from './screen-narrator.js';
 
 let tray = null;
 let mainWindow = null;
+let startupWindow = null;
+let appConfig = null;
 
-function createWindow() {
+function createStartupModal() {
+  startupWindow = new BrowserWindow({
+    width: 550,
+    height: 650,
+    show: true,
+    center: true,
+    alwaysOnTop: true,
+    resizable: false,
+    frame: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  startupWindow.loadFile('startup-modal.html');
+
+  startupWindow.on('closed', () => {
+    startupWindow = null;
+    // If no config was set, quit the app
+    if (!appConfig) {
+      app.quit();
+    }
+  });
+}
+
+function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
@@ -40,9 +68,17 @@ function createTray() {
 
   tray = new Tray(trayIcon);
 
+  const modeLabel = appConfig?.mode === 'notification' ? 'Notification Mode' : 'Check-in Mode';
+  const statusLabel = appConfig?.mode === 'notification' ? 'Monitoring for alerts' : 'Continuous narration';
+
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Screen Narrator',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: modeLabel,
       type: 'normal',
       enabled: false
     },
@@ -52,12 +88,14 @@ function createTray() {
     {
       label: 'Show Dashboard',
       click: () => {
-        mainWindow.show();
-        mainWindow.focus();
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
       }
     },
     {
-      label: 'Status: Running',
+      label: `Status: ${statusLabel}`,
       enabled: false
     },
     {
@@ -80,17 +118,45 @@ function createTray() {
     }
   ]);
 
-  tray.setToolTip('Screen Narrator - AI-powered screen description');
+  const tooltipText = appConfig?.mode === 'notification'
+    ? `Screen Narrator - Monitoring for: ${appConfig.searchPrompt?.substring(0, 50)}...`
+    : 'Screen Narrator - AI-powered screen description';
+
+  tray.setToolTip(tooltipText);
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
-    mainWindow.show();
-    mainWindow.focus();
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
+}
+
+// Handle startup configuration
+function handleStartupConfig(config) {
+  appConfig = config;
+
+  // Set the narrator configuration
+  setAppConfig(config);
+
+  // Close startup modal
+  if (startupWindow) {
+    startupWindow.close();
+  }
+
+  // Create main window and tray
+  createMainWindow();
+  createTray();
+
+  // Start the narrator
+  startNarrator();
 }
 
 // Show export dialog
 async function showExportDialog() {
+  if (!mainWindow) return;
+
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'question',
     buttons: ['Cancel', 'Text Only', 'Text + Screenshots'],
@@ -179,10 +245,14 @@ ipcMain.handle('export-session', async (event, includeScreenshots) => {
   }
 });
 
+// Handle startup configuration from modal
+ipcMain.on('start-app-with-config', (event, config) => {
+  handleStartupConfig(config);
+});
+
 app.whenReady().then(() => {
-  createWindow();
-  createTray();
-  startNarrator(); // Start screen narration immediately
+  // Show startup modal first
+  createStartupModal();
 });
 
 app.on('window-all-closed', () => {
@@ -194,7 +264,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createStartupModal();
   }
 });
 
