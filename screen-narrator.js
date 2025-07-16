@@ -8,6 +8,7 @@ import screenshot from 'screenshot-desktop';
 import say from 'say';
 import archiver from 'archiver';
 import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp';
 
 dotenv.config();
 
@@ -21,7 +22,8 @@ const SOUND_PATH = path.join(process.cwd(), 'sound.wav');
 // App configuration
 let appConfig = {
     mode: 'checkin', // 'checkin' or 'notification'
-    searchPrompt: null
+    searchPrompt: null,
+    region: null // { x, y, width, height } for targeted screenshots
 };
 
 // Ensure session directories exist
@@ -64,6 +66,19 @@ function setAppConfig(config) {
     if (appConfig.mode === 'notification') {
         logger.info(`Watching for: ${appConfig.searchPrompt}`);
     }
+    if (appConfig.region) {
+        logger.info(`Using region: ${appConfig.region.width}x${appConfig.region.height} at (${appConfig.region.x}, ${appConfig.region.y})`);
+    }
+}
+
+// Set screen region
+function setScreenRegion(region) {
+    appConfig.region = region;
+    if (region) {
+        logger.info(`Screen region set: ${region.width}x${region.height} at (${region.x}, ${region.y})`);
+    } else {
+        logger.info('Screen region cleared - using full screen');
+    }
 }
 
 // Play sound notification (alarm)
@@ -94,8 +109,8 @@ function playAlarmSound() {
 // Text-to-speech function
 function speakText(text) {
     return new Promise((resolve, reject) => {
-        // Remove ${ALARM} marker from text before speaking
-        const cleanText = text.replace(/\$\{ALARM\}/g, '').trim();
+        // Remove [ALARM] marker from text before speaking
+        const cleanText = text.replace(/\[ALARM\]/g, '').trim();
 
         if (process.platform === 'win32') {
             say.speak(cleanText, 'Microsoft Zira Desktop', 1.3, (err) => {
@@ -130,14 +145,38 @@ async function takeScreenshot() {
         const filename = `capture_${captureCount.toString().padStart(3, '0')}_${timestamp}.png`;
         const filePath = path.join(SCREENSHOTS_DIR, filename);
 
-        const img = await screenshot({ format: 'png' });
+        let img;
+
+        if (appConfig.region) {
+            // Take full screen screenshot first, then crop to region
+            const fullScreenImg = await screenshot({ format: 'png' });
+
+            // Use sharp or canvas to crop the image
+            img = await sharp(fullScreenImg)
+                .extract({
+                    left: appConfig.region.x,
+                    top: appConfig.region.y,
+                    width: appConfig.region.width,
+                    height: appConfig.region.height
+                })
+                .png()
+                .toBuffer();
+
+            logger.info(`Regional screenshot captured: ${appConfig.region.width}x${appConfig.region.height} at (${appConfig.region.x}, ${appConfig.region.y})`);
+        } else {
+            // Take full screen screenshot
+            img = await screenshot({ format: 'png' });
+            logger.info('Full screen screenshot captured');
+        }
+
         fs.writeFileSync(filePath, img);
 
         logger.info(`Screenshot ${captureCount} captured: ${filename}`);
         return {
             path: filePath,
             filename: filename,
-            captureNumber: captureCount
+            captureNumber: captureCount,
+            region: appConfig.region
         };
     } catch (error) {
         logger.error(`Screenshot failed: ${error.message}`);
@@ -171,15 +210,15 @@ async function getScreenDescription(imagePath) {
 Analyze the screenshot carefully and determine if what the user is looking for is present or visible.
 
 If you find what they're looking for:
-- Start your response with ${ALARM} (this exact text)
+- Start your response with [ALARM] (this exact text)
 - Then provide a clear description of what you found and why it matches their search
 - Be specific about where you see it and what makes it match their criteria
 
 If you don't find what they're looking for:
 - Simply provide a brief description of what you see instead
-- Do NOT include ${ALARM} in your response
+- Do NOT include [ALARM] in your response
 
-Remember: Only include ${ALARM} if you're confident you found what they're specifically looking for.`;
+Remember: Only include [ALARM] if you're confident you found what they're specifically looking for.`;
         }
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -257,7 +296,7 @@ async function captureAndNarrate() {
         }
 
         // Check if this is an alarm trigger
-        const isAlarmTriggered = description.includes('${ALARM}');
+        const isAlarmTriggered = description.includes('[ALARM]');
 
         // Create entry
         const entry = {
@@ -276,7 +315,7 @@ async function captureAndNarrate() {
         // Log to session file
         const logEntry = `Capture ${entry.captureNumber} - ${new Date(entry.timestamp).toLocaleString()} ${isAlarmTriggered ? '[ALARM]' : ''}\n`;
         const separator = '-'.repeat(50);
-        const cleanDescription = description.replace(/\$\{ALARM\}/g, '').trim();
+        const cleanDescription = description.replace(/\[ALARM\]/g, '').trim();
         fs.appendFileSync(sessionLogPath, `${logEntry}${separator}\n${cleanDescription}\n\n`);
 
         logger.info(`Capture ${entry.captureNumber}: ${cleanDescription}`);
@@ -423,5 +462,6 @@ export {
     cleanupSession,
     getSessionData,
     speakText,
-    setAppConfig
+    setAppConfig,
+    setScreenRegion
 }; 

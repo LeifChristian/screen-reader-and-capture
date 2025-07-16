@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Screen Region Selector</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        cursor: crosshair;
+        background: rgba(0, 0, 0, 0.3);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+      }
+
+      .selection-box {
+        position: absolute;
+        border: 2px dashed #ff0000;
+        background: rgba(255, 0, 0, 0.1);
+        pointer-events: none;
+        display: none;
+        z-index: 1001;
+      }
+
+      .instructions {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 1002;
+        text-align: center;
+      }
+
+      .coordinates {
+        position: fixed;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        z-index: 1002;
+        font-family: monospace;
+        display: none;
+      }
+
+      .controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 12px;
+        z-index: 1002;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .btn-primary {
+        background: #4caf50;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #45a049;
+      }
+
+      .btn-secondary {
+        background: #f44336;
+        color: white;
+      }
+
+      .btn-secondary:hover {
+        background: #da190b;
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .dimension-info {
+        position: fixed;
+        bottom: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        z-index: 1002;
+        font-family: monospace;
+        display: none;
+      }
+
+      .selection-box::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: -1px;
+        right: -1px;
+        bottom: -1px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        pointer-events: none;
+      }
+
+      .corner-handle {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background: #ff0000;
+        border: 1px solid white;
+        z-index: 1003;
+      }
+
+      .corner-handle.top-left {
+        top: -4px;
+        left: -4px;
+        cursor: nw-resize;
+      }
+
+      .corner-handle.top-right {
+        top: -4px;
+        right: -4px;
+        cursor: ne-resize;
+      }
+
+      .corner-handle.bottom-left {
+        bottom: -4px;
+        left: -4px;
+        cursor: sw-resize;
+      }
+
+      .corner-handle.bottom-right {
+        bottom: -4px;
+        right: -4px;
+        cursor: se-resize;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="overlay" id="overlay"></div>
+
+    <div class="instructions">
+      <div>🎯 Click and drag to select a screen region for monitoring</div>
+      <div style="margin-top: 4px; font-size: 12px; opacity: 0.8">
+        Press ESC to cancel
+      </div>
+    </div>
+
+    <div class="coordinates" id="coordinates">Position: (0, 0)</div>
+
+    <div class="dimension-info" id="dimensionInfo">Size: 0 × 0</div>
+
+    <div class="selection-box" id="selectionBox">
+      <div class="corner-handle top-left"></div>
+      <div class="corner-handle top-right"></div>
+      <div class="corner-handle bottom-left"></div>
+      <div class="corner-handle bottom-right"></div>
+    </div>
+
+    <div class="controls">
+      <button
+        class="btn btn-primary"
+        id="confirmBtn"
+        onclick="confirmSelection()"
+        disabled
+      >
+        ✓ Use This Region
+      </button>
+      <button class="btn btn-secondary" onclick="cancelSelection()">
+        ✗ Cancel
+      </button>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      let isSelecting = false;
+      let startX = 0;
+      let startY = 0;
+      let currentSelection = null;
+
+      const overlay = document.getElementById("overlay");
+      const selectionBox = document.getElementById("selectionBox");
+      const coordinates = document.getElementById("coordinates");
+      const dimensionInfo = document.getElementById("dimensionInfo");
+      const confirmBtn = document.getElementById("confirmBtn");
+
+      // Mouse events for selection
+      overlay.addEventListener("mousedown", startSelection);
+      overlay.addEventListener("mousemove", updateSelection);
+      overlay.addEventListener("mouseup", endSelection);
+
+      // Keyboard events
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          cancelSelection();
+        }
+      });
+
+      function startSelection(e) {
+        isSelecting = true;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        selectionBox.style.left = startX + "px";
+        selectionBox.style.top = startY + "px";
+        selectionBox.style.width = "0px";
+        selectionBox.style.height = "0px";
+        selectionBox.style.display = "block";
+
+        coordinates.style.display = "block";
+        dimensionInfo.style.display = "block";
+
+        updateCoordinates(e);
+      }
+
+      function updateSelection(e) {
+        updateCoordinates(e);
+
+        if (!isSelecting) return;
+
+        const currentX = e.clientX;
+        const currentY = e.clientY;
+
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+
+        selectionBox.style.left = left + "px";
+        selectionBox.style.top = top + "px";
+        selectionBox.style.width = width + "px";
+        selectionBox.style.height = height + "px";
+
+        dimensionInfo.textContent = `Size: ${width} × ${height}`;
+
+        // Enable confirm button if selection is large enough
+        confirmBtn.disabled = width < 50 || height < 50;
+      }
+
+      function endSelection(e) {
+        if (!isSelecting) return;
+
+        isSelecting = false;
+
+        const currentX = e.clientX;
+        const currentY = e.clientY;
+
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+
+        if (width >= 50 && height >= 50) {
+          currentSelection = {
+            x: left,
+            y: top,
+            width: width,
+            height: height,
+          };
+
+          confirmBtn.disabled = false;
+
+          // Show final selection info
+          dimensionInfo.textContent = `Selected: ${width} × ${height} at (${left}, ${top})`;
+        } else {
+          // Selection too small, reset
+          selectionBox.style.display = "none";
+          confirmBtn.disabled = true;
+          dimensionInfo.style.display = "none";
+        }
+      }
+
+      function updateCoordinates(e) {
+        coordinates.textContent = `Position: (${e.clientX}, ${e.clientY})`;
+      }
+
+      function confirmSelection() {
+        if (!currentSelection) return;
+
+        // Get screen scale factor for high DPI displays
+        const scaleFactor = window.devicePixelRatio || 1;
+
+        const region = {
+          x: Math.round(currentSelection.x * scaleFactor),
+          y: Math.round(currentSelection.y * scaleFactor),
+          width: Math.round(currentSelection.width * scaleFactor),
+          height: Math.round(currentSelection.height * scaleFactor),
+        };
+
+        // Send region to main process
+        ipcRenderer.send("region-selected", region);
+
+        // Close window
+        window.close();
+      }
+
+      function cancelSelection() {
+        // Send cancel signal to main process
+        ipcRenderer.send("region-selection-cancelled");
+
+        // Close window
+        window.close();
+      }
+
+      // Focus window when loaded
+      window.addEventListener("load", () => {
+        window.focus();
+      });
+    </script>
+  </body>
+</html>

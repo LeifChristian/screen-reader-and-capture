@@ -1,11 +1,14 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, screen } from 'electron';
 import path from 'path';
-import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig } from './screen-narrator.js';
+import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion } from './screen-narrator.js';
 
 let tray = null;
 let mainWindow = null;
 let startupWindow = null;
+let regionSelectorWindow = null;
+let regionOverlayWindow = null;
 let appConfig = null;
+let currentRegion = null;
 
 function createStartupModal() {
   startupWindow = new BrowserWindow({
@@ -62,6 +65,76 @@ function createMainWindow() {
   });
 }
 
+function createRegionSelector() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
+  regionSelectorWindow = new BrowserWindow({
+    width: width,
+    height: height,
+    x: 0,
+    y: 0,
+    show: true,
+    fullscreen: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  regionSelectorWindow.loadFile('region-selector.html');
+
+  regionSelectorWindow.on('closed', () => {
+    regionSelectorWindow = null;
+  });
+
+  // Focus the window
+  regionSelectorWindow.focus();
+  regionSelectorWindow.setAlwaysOnTop(true, 'screen-saver');
+}
+
+function createRegionOverlay() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+
+  regionOverlayWindow = new BrowserWindow({
+    width: width,
+    height: height,
+    x: primaryDisplay.bounds.x,
+    y: primaryDisplay.bounds.y,
+    show: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: false,
+    skipTaskbar: true,
+    resizable: false,
+    focusable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  regionOverlayWindow.loadFile('region-overlay.html');
+  regionOverlayWindow.setIgnoreMouseEvents(true);
+  regionOverlayWindow.setAlwaysOnTop(false);
+
+  regionOverlayWindow.on('closed', () => {
+    regionOverlayWindow = null;
+  });
+
+  // Update overlay with current region
+  if (currentRegion) {
+    regionOverlayWindow.webContents.once('did-finish-load', () => {
+      regionOverlayWindow.webContents.send('update-region', currentRegion);
+    });
+  }
+}
+
 function createTray() {
   // Create a simple tray icon
   const trayIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
@@ -71,6 +144,58 @@ function createTray() {
   const modeLabel = appConfig?.mode === 'notification' ? 'Notification Mode' : 'Check-in Mode';
   const statusLabel = appConfig?.mode === 'notification' ? 'Monitoring for alerts' : 'Continuous narration';
 
+  let regionLabel, regionMenuItems;
+
+  if (currentRegion) {
+    regionLabel = `Target: ${currentRegion.width}×${currentRegion.height} at (${currentRegion.x}, ${currentRegion.y})`;
+    regionMenuItems = [
+      {
+        label: '🎯 Select New Target Region',
+        click: () => {
+          createRegionSelector();
+        }
+      },
+      {
+        label: '👁️ Show Target Region',
+        click: () => {
+          if (regionOverlayWindow) {
+            regionOverlayWindow.show();
+            regionOverlayWindow.focus();
+          } else {
+            createRegionOverlay();
+          }
+        }
+      },
+      {
+        label: '🖥️ Use Full Screen',
+        click: () => {
+          currentRegion = null;
+          setScreenRegion(null);
+          updateTrayMenu();
+
+          // Hide overlay
+          if (regionOverlayWindow) {
+            regionOverlayWindow.close();
+          }
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('region-updated', null);
+          }
+        }
+      }
+    ];
+  } else {
+    regionLabel = 'Full Screen';
+    regionMenuItems = [
+      {
+        label: '🎯 Select Target Region',
+        click: () => {
+          createRegionSelector();
+        }
+      }
+    ];
+  }
+
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Screen Narrator',
@@ -79,6 +204,11 @@ function createTray() {
     },
     {
       label: modeLabel,
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: regionLabel,
       type: 'normal',
       enabled: false
     },
@@ -94,6 +224,10 @@ function createTray() {
         }
       }
     },
+    {
+      type: 'separator'
+    },
+    ...regionMenuItems,
     {
       label: `Status: ${statusLabel}`,
       enabled: false
@@ -133,6 +267,13 @@ function createTray() {
   });
 }
 
+// Update tray menu when region changes
+function updateTrayMenu() {
+  if (tray) {
+    createTray(); // Recreate tray with updated menu
+  }
+}
+
 // Handle startup configuration
 function handleStartupConfig(config) {
   appConfig = config;
@@ -151,6 +292,28 @@ function handleStartupConfig(config) {
 
   // Start the narrator
   startNarrator();
+}
+
+// Handle startup with region selection
+function handleStartupWithRegionSelection(config) {
+  appConfig = config;
+
+  // Set the narrator configuration
+  setAppConfig(config);
+
+  // Close startup modal
+  if (startupWindow) {
+    startupWindow.close();
+  }
+
+  // Create main window and tray first
+  createMainWindow();
+  createTray();
+
+  // Show region selector
+  createRegionSelector();
+
+  // Don't start narrator yet - wait for region selection
 }
 
 // Show export dialog
@@ -230,6 +393,69 @@ async function showQuitDialog() {
   }
 }
 
+// Handle region selection
+ipcMain.on('region-selected', (event, region) => {
+  currentRegion = region; // Update currentRegion
+  setScreenRegion(region);
+  updateTrayMenu();
+
+  if (regionSelectorWindow) {
+    regionSelectorWindow.close();
+  }
+
+  // Create or update overlay
+  if (regionOverlayWindow) {
+    regionOverlayWindow.webContents.send('update-region', region);
+  } else {
+    createRegionOverlay();
+  }
+
+  // Now start the narrator with the selected region
+  startNarrator();
+
+  // Notify main window of region change
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('region-updated', region);
+  }
+
+  // Show confirmation dialog
+  if (mainWindow) {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Region Selected',
+      message: 'Target region set successfully!',
+      detail: `The app will now monitor a ${region.width}×${region.height} region at position (${region.x}, ${region.y})`
+    });
+  }
+});
+
+// Handle region selection cancellation
+ipcMain.on('region-selection-cancelled', () => {
+  if (regionSelectorWindow) {
+    regionSelectorWindow.close();
+  }
+
+  // If this was during startup, quit the app
+  if (!appConfig || !getSessionData().captureCount) {
+    app.quit();
+  }
+});
+
+// Handle overlay region requests
+ipcMain.on('get-current-region', (event) => {
+  event.reply('update-region', currentRegion);
+});
+
+// Handle startup configuration from modal
+ipcMain.on('start-app-with-config', (event, config) => {
+  handleStartupConfig(config);
+});
+
+// Handle startup with region selection
+ipcMain.on('start-app-with-region-selection', (event, config) => {
+  handleStartupWithRegionSelection(config);
+});
+
 // IPC handlers for renderer communication
 ipcMain.handle('get-session-data', () => {
   return getSessionData();
@@ -243,11 +469,6 @@ ipcMain.handle('export-session', async (event, includeScreenshots) => {
   } catch (error) {
     throw error;
   }
-});
-
-// Handle startup configuration from modal
-ipcMain.on('start-app-with-config', (event, config) => {
-  handleStartupConfig(config);
 });
 
 app.whenReady().then(() => {
@@ -273,5 +494,11 @@ app.on('before-quit', (event) => {
   if (tray) {
     tray.destroy();
   }
+
+  // Close overlay window
+  if (regionOverlayWindow) {
+    regionOverlayWindow.close();
+  }
+
   stopNarrator();
 });
