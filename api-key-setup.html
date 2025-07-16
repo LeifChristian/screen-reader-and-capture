@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Screen Narrator - API Key Setup</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .modal {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 24px 38px rgba(0, 0, 0, 0.14),
+          0 9px 46px rgba(0, 0, 0, 0.12), 0 11px 15px rgba(0, 0, 0, 0.2);
+        width: 500px;
+        max-width: 90vw;
+        padding: 0;
+        animation: modalSlideIn 0.3s ease-out;
+      }
+
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-50px) scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 24px;
+        border-radius: 12px 12px 0 0;
+        text-align: center;
+      }
+
+      .modal-header h2 {
+        font-size: 24px;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .modal-header p {
+        opacity: 0.9;
+        font-size: 14px;
+      }
+
+      .modal-body {
+        padding: 32px 24px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+        transition: border-color 0.2s ease;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .form-group .hint {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+      }
+
+      .info-section {
+        background: #f8f9fa;
+        padding: 16px;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        margin-bottom: 20px;
+      }
+
+      .info-section h4 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .info-section p {
+        font-size: 13px;
+        color: #666;
+        line-height: 1.4;
+        margin-bottom: 8px;
+      }
+
+      .info-section a {
+        color: #667eea;
+        text-decoration: none;
+      }
+
+      .info-section a:hover {
+        text-decoration: underline;
+      }
+
+      .status-message {
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+        display: none;
+      }
+
+      .status-message.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .status-message.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .status-message.testing {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #b8daff;
+      }
+
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
+      .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 80px;
+      }
+
+      .btn-secondary {
+        background: #f5f5f5;
+        color: #666;
+      }
+
+      .btn-secondary:hover {
+        background: #e0e0e0;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .btn-test {
+        background: #28a745;
+        color: white;
+      }
+
+      .btn-test:hover {
+        background: #218838;
+      }
+
+      .btn-test:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .loading-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffffff;
+        border-radius: 50%;
+        border-top-color: transparent;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🔑 API Key Setup</h2>
+        <p>Enter your OpenAI API key to get started</p>
+      </div>
+
+      <div class="modal-body">
+        <div class="info-section">
+          <h4>🔒 Your API Key is Secure</h4>
+          <p>
+            Your API key is encrypted and stored locally on your device. It
+            never leaves your computer except to make requests to OpenAI.
+          </p>
+          <p>
+            Need an API key?
+            <a href="#" onclick="openApiKeyHelp()">Get one from OpenAI →</a>
+          </p>
+        </div>
+
+        <div class="status-message" id="statusMessage"></div>
+
+        <div class="form-group">
+          <label for="apiKey">OpenAI API Key</label>
+          <input
+            type="password"
+            id="apiKey"
+            placeholder="sk-..."
+            maxlength="200"
+          />
+          <div class="hint">
+            Your API key should start with "sk-" and be about 50+ characters
+            long
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="skipSetup()">
+          Skip for Now
+        </button>
+        <button
+          class="btn btn-test"
+          id="testBtn"
+          onclick="testApiKey()"
+          disabled
+        >
+          Test Key
+        </button>
+        <button
+          class="btn btn-primary"
+          id="saveBtn"
+          onclick="saveApiKey()"
+          disabled
+        >
+          Save & Continue
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const { ipcRenderer, shell } = require("electron");
+
+      const apiKeyInput = document.getElementById("apiKey");
+      const testBtn = document.getElementById("testBtn");
+      const saveBtn = document.getElementById("saveBtn");
+      const statusMessage = document.getElementById("statusMessage");
+
+      let isKeyValid = false;
+
+      // Listen for input changes
+      apiKeyInput.addEventListener("input", () => {
+        const apiKey = apiKeyInput.value.trim();
+        const isValidFormat = apiKey.length > 20 && apiKey.startsWith("sk-");
+
+        testBtn.disabled = !isValidFormat;
+        saveBtn.disabled = !isKeyValid;
+
+        if (statusMessage.style.display !== "none") {
+          hideStatusMessage();
+        }
+      });
+
+      // Test API key
+      async function testApiKey() {
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!apiKey) {
+          showStatusMessage("Please enter an API key", "error");
+          return;
+        }
+
+        testBtn.disabled = true;
+        testBtn.innerHTML = '<span class="loading-spinner"></span>Testing...';
+
+        showStatusMessage("Testing API key...", "testing");
+
+        try {
+          const result = await ipcRenderer.invoke("test-api-key", apiKey);
+
+          if (result.success) {
+            showStatusMessage("✅ API key is valid!", "success");
+            isKeyValid = true;
+            saveBtn.disabled = false;
+          } else {
+            showStatusMessage(
+              `❌ API key test failed: ${result.error}`,
+              "error"
+            );
+            isKeyValid = false;
+            saveBtn.disabled = true;
+          }
+        } catch (error) {
+          showStatusMessage(
+            `❌ Error testing API key: ${error.message}`,
+            "error"
+          );
+          isKeyValid = false;
+          saveBtn.disabled = true;
+        }
+
+        testBtn.disabled = false;
+        testBtn.innerHTML = "Test Key";
+      }
+
+      // Save API key
+      async function saveApiKey() {
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!apiKey || !isKeyValid) {
+          showStatusMessage("Please test your API key first", "error");
+          return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="loading-spinner"></span>Saving...';
+
+        try {
+          const result = await ipcRenderer.invoke("save-api-key", apiKey);
+
+          if (result.success) {
+            showStatusMessage("✅ API key saved successfully!", "success");
+
+            // Close modal and continue to app
+            setTimeout(() => {
+              ipcRenderer.send("api-key-setup-complete");
+              window.close();
+            }, 1000);
+          } else {
+            showStatusMessage(
+              `❌ Failed to save API key: ${result.error}`,
+              "error"
+            );
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = "Save & Continue";
+          }
+        } catch (error) {
+          showStatusMessage(
+            `❌ Error saving API key: ${error.message}`,
+            "error"
+          );
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = "Save & Continue";
+        }
+      }
+
+      // Skip setup
+      function skipSetup() {
+        ipcRenderer.send("api-key-setup-skipped");
+        window.close();
+      }
+
+      // Show help for getting API key
+      function openApiKeyHelp() {
+        shell.openExternal("https://platform.openai.com/api-keys");
+      }
+
+      // Show status message
+      function showStatusMessage(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = `status-message ${type}`;
+        statusMessage.style.display = "block";
+      }
+
+      // Hide status message
+      function hideStatusMessage() {
+        statusMessage.style.display = "none";
+      }
+
+      // Handle escape key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          skipSetup();
+        }
+        if (e.key === "Enter" && !testBtn.disabled) {
+          testApiKey();
+        }
+      });
+
+      // Focus on input when loaded
+      window.addEventListener("load", () => {
+        apiKeyInput.focus();
+      });
+    </script>
+  </body>
+</html>

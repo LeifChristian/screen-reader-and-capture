@@ -1,14 +1,23 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, screen } from 'electron';
 import path from 'path';
+import dotenv from 'dotenv';
 import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion } from './screen-narrator.js';
+import apiKeyManager from './api-key-manager.js';
+import sessionManager from './session-manager.js';
+
+dotenv.config();
+
+const IS_DEV = process.env.IS_DEV === 'true';
 
 let tray = null;
 let mainWindow = null;
 let startupWindow = null;
+let apiKeyWindow = null;
 let regionSelectorWindow = null;
 let regionOverlayWindow = null;
 let appConfig = null;
 let currentRegion = null;
+let isAppReady = false;
 
 function createStartupModal() {
   startupWindow = new BrowserWindow({
@@ -29,10 +38,29 @@ function createStartupModal() {
 
   startupWindow.on('closed', () => {
     startupWindow = null;
-    // If no config was set, quit the app
-    if (!appConfig) {
-      app.quit();
+    // Don't quit the app on cancel - just hide to tray
+  });
+}
+
+function createApiKeyWindow() {
+  apiKeyWindow = new BrowserWindow({
+    width: 500,
+    height: 600,
+    show: true,
+    center: true,
+    alwaysOnTop: true,
+    resizable: false,
+    frame: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
     }
+  });
+
+  apiKeyWindow.loadFile('api-key-setup.html');
+
+  apiKeyWindow.on('closed', () => {
+    apiKeyWindow = null;
   });
 }
 
@@ -202,16 +230,18 @@ function createTray() {
       type: 'normal',
       enabled: false
     },
-    {
-      label: modeLabel,
-      type: 'normal',
-      enabled: false
-    },
-    {
-      label: regionLabel,
-      type: 'normal',
-      enabled: false
-    },
+    ...(appConfig ? [
+      {
+        label: modeLabel,
+        type: 'normal',
+        enabled: false
+      },
+      {
+        label: regionLabel,
+        type: 'normal',
+        enabled: false
+      }
+    ] : []),
     {
       type: 'separator'
     },
@@ -221,29 +251,60 @@ function createTray() {
         if (mainWindow) {
           mainWindow.show();
           mainWindow.focus();
+        } else {
+          createMainWindow();
         }
       }
     },
     {
-      type: 'separator'
-    },
-    ...regionMenuItems,
-    {
-      label: `Status: ${statusLabel}`,
-      enabled: false
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: 'Export Session...',
+      label: '📁 File Manager',
       click: () => {
-        showExportDialog();
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('show-file-manager');
+        } else {
+          createMainWindow();
+          mainWindow.webContents.once('did-finish-load', () => {
+            mainWindow.webContents.send('show-file-manager');
+          });
+        }
+      }
+    },
+    {
+      label: '🔑 API Key Settings',
+      click: () => {
+        createApiKeyWindow();
+      }
+    },
+    {
+      label: '⚙️ Start New Session',
+      click: () => {
+        createStartupModal();
       }
     },
     {
       type: 'separator'
     },
+    ...(appConfig ? [
+      ...regionMenuItems,
+      {
+        label: `Status: ${statusLabel}`,
+        enabled: false
+      },
+      {
+        type: 'separator'
+      },
+      {
+        label: 'Export Current Session...',
+        click: () => {
+          showExportDialog();
+        }
+      },
+      {
+        type: 'separator'
+      }
+    ] : []),
     {
       label: 'Quit',
       click: () => {
@@ -263,6 +324,8 @@ function createTray() {
     if (mainWindow) {
       mainWindow.show();
       mainWindow.focus();
+    } else {
+      createMainWindow();
     }
   });
 }
@@ -446,6 +509,115 @@ ipcMain.on('get-current-region', (event) => {
   event.reply('update-region', currentRegion);
 });
 
+// API Key Management IPC handlers
+ipcMain.handle('test-api-key', async (event, apiKey) => {
+  try {
+    const isValid = await apiKeyManager.testApiKey(apiKey);
+    return { success: isValid, error: isValid ? null : 'Invalid API key or insufficient permissions' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-api-key', async (event, apiKey) => {
+  try {
+    const success = apiKeyManager.hashAndStore(apiKey);
+    return { success, error: success ? null : 'Failed to save API key' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.on('api-key-setup-complete', () => {
+  if (apiKeyWindow) {
+    apiKeyWindow.close();
+  }
+  // Continue with app initialization
+  checkApiKeyAndContinue();
+});
+
+ipcMain.on('api-key-setup-skipped', () => {
+  if (apiKeyWindow) {
+    apiKeyWindow.close();
+  }
+  // Continue without API key (limited functionality)
+});
+
+// Session Management IPC handlers
+ipcMain.handle('get-all-sessions', async () => {
+  try {
+    const sessions = sessionManager.getAllSessions();
+    return { success: true, sessions };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-session-stats', async () => {
+  try {
+    const stats = sessionManager.getSessionStats();
+    return { success: true, stats };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-session', async (event, sessionId) => {
+  try {
+    const result = sessionManager.deleteSession(sessionId);
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('export-session-with-picker', async (event, sessionId, includeScreenshots) => {
+  try {
+    const defaultName = `screen_narrator_session_${sessionId.substring(0, 8)}_${new Date().toISOString().split('T')[0]}`;
+    const fileType = includeScreenshots ? 'zip' : 'txt';
+
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Session',
+      defaultPath: `${defaultName}.${fileType}`,
+      filters: includeScreenshots
+        ? [{ name: 'ZIP Files', extensions: ['zip'] }]
+        : [{ name: 'Text Files', extensions: ['txt'] }]
+    });
+
+    if (saveResult.canceled) {
+      return { success: false, cancelled: true };
+    }
+
+    const exportPath = saveResult.filePath.replace(/\.[^/.]+$/, ''); // Remove extension
+    const result = await sessionManager.exportSession(sessionId, exportPath, includeScreenshots);
+
+    if (result.success) {
+      return {
+        success: true,
+        path: result.path,
+        size: sessionManager.formatSize(result.size)
+      };
+    } else {
+      return result;
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Check API key and continue app initialization
+function checkApiKeyAndContinue() {
+  if (IS_DEV || apiKeyManager.hasStoredKey()) {
+    isAppReady = true;
+    if (!tray) {
+      createTray();
+    }
+  } else {
+    // Show API key setup
+    createApiKeyWindow();
+  }
+}
+
 // Handle startup configuration from modal
 ipcMain.on('start-app-with-config', (event, config) => {
   handleStartupConfig(config);
@@ -454,6 +626,14 @@ ipcMain.on('start-app-with-config', (event, config) => {
 // Handle startup with region selection
 ipcMain.on('start-app-with-region-selection', (event, config) => {
   handleStartupWithRegionSelection(config);
+});
+
+// Handle setup cancellation
+ipcMain.on('cancel-setup', () => {
+  if (startupWindow) {
+    startupWindow.close();
+  }
+  // Don't quit the app, just close the modal
 });
 
 // IPC handlers for renderer communication
@@ -472,8 +652,8 @@ ipcMain.handle('export-session', async (event, includeScreenshots) => {
 });
 
 app.whenReady().then(() => {
-  // Show startup modal first
-  createStartupModal();
+  // Check API key first
+  checkApiKeyAndContinue();
 });
 
 app.on('window-all-closed', () => {

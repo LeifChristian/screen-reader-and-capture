@@ -9,15 +9,24 @@ import say from 'say';
 import archiver from 'archiver';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
+import apiKeyManager from './api-key-manager.js';
 
 dotenv.config();
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const IS_DEV = process.env.IS_DEV === 'true';
 const INTERVAL_MS = 60 * 1000; // 60 seconds between captures
 const SESSION_ID = uuidv4();
 const SESSION_DIR = path.join(process.cwd(), 'sessions', SESSION_ID);
 const SCREENSHOTS_DIR = path.join(SESSION_DIR, 'screenshots');
 const SOUND_PATH = path.join(process.cwd(), 'sound.wav');
+
+// Get API key from manager or environment
+function getApiKey() {
+    if (IS_DEV && process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here') {
+        return process.env.OPENAI_API_KEY;
+    }
+    return apiKeyManager.getStoredKey();
+}
 
 // App configuration
 let appConfig = {
@@ -225,7 +234,7 @@ Remember: Only include [ALARM] if you're confident you found what they're specif
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${OPENAI_API_KEY}`,
+                Authorization: `Bearer ${getApiKey()}`,
             },
             body: JSON.stringify({
                 model: 'gpt-4o',

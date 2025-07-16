@@ -404,7 +404,7 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="window.close()">
+        <button class="btn btn-secondary" onclick="cancelSetup()">
           Cancel
         </button>
         <button
@@ -511,6 +511,11 @@
         }
 
         // Close modal
+        window.close();
+      }
+
+      function cancelSetup() {
+        ipcRenderer.send("cancel-setup");
         window.close();
       }
 
