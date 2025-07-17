@@ -299,6 +299,32 @@ function createTray() {
       }
     },
     {
+      type: 'separator'
+    },
+    {
+      label: 'Quick Access:',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Left Click → Dashboard',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Right Click → Volume',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Double Click → Mute/Unmute',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      type: 'separator'
+    },
+    {
       label: '🔑 API Key Settings',
       click: () => {
         createApiKeyWindow();
@@ -347,26 +373,19 @@ function createTray() {
   tray.setToolTip(tooltipText);
   tray.setContextMenu(contextMenu);
 
-  // Left click to show volume slider
-  tray.on('click', async () => {
-    const isMuted = await volumeControl.isMutedState();
-    if (isMuted) {
-      // If muted, unmute on left click
-      await volumeControl.toggleMute();
-    } else {
-      // If not muted, show volume slider
-      volumeControl.showVolumeSlider();
-    }
-  });
-
-  // Right click to toggle mute
-  tray.on('right-click', async () => {
-    await volumeControl.toggleMute();
-  });
-
-  // Double click to show dashboard (backup)
-  tray.on('double-click', () => {
+  // Left click to show dashboard
+  tray.on('click', () => {
     showMainWindow();
+  });
+
+  // Right click to show volume slider
+  tray.on('right-click', () => {
+    volumeControl.showVolumeSlider();
+  });
+
+  // Double click to toggle mute
+  tray.on('double-click', async () => {
+    await volumeControl.toggleMute();
   });
 
   console.log('🔥 Tray created successfully');
@@ -766,6 +785,22 @@ ipcMain.handle('reset-settings', () => {
   try {
     const settings = settingsManager.resetToDefaults();
     return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('start-new-session', () => {
+  try {
+    // Hide main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+
+    // Create startup modal
+    createStartupModal();
+
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }

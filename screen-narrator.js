@@ -603,18 +603,7 @@ async function captureAndNarrate() {
         if (isAlarmTriggered) {
             logger.warn(`🚨 ALARM TRIGGERED! Found: ${cleanDescription}`);
 
-            // Play alarm sound
-            await playAlarmSound();
-
-            // Send webhook for ALARM event
-            const webhookResult = await sendWebhookWithRetry('ALARM', entry);
-            if (webhookResult.success) {
-                logger.info('ALARM webhook sent successfully');
-            } else {
-                logger.warn(`ALARM webhook failed: ${webhookResult.reason || webhookResult.error}`);
-            }
-
-            // Trigger visual flash indicator
+            // Trigger visual flash indicator immediately (concurrent with sound)
             const allWindows = BrowserWindow.getAllWindows();
             const mainWindow = allWindows.find(win => win.webContents.getURL().includes('narrator.html'));
 
@@ -624,6 +613,17 @@ async function captureAndNarrate() {
 
                 // Send to main process for flash indicator window
                 mainWindow.webContents.send('trigger-flash-to-main');
+            }
+
+            // Play alarm sound (concurrent with flash indicator - no await for immediate execution)
+            playAlarmSound();
+
+            // Send webhook for ALARM event
+            const webhookResult = await sendWebhookWithRetry('ALARM', entry);
+            if (webhookResult.success) {
+                logger.info('ALARM webhook sent successfully');
+            } else {
+                logger.warn(`ALARM webhook failed: ${webhookResult.reason || webhookResult.error}`);
             }
         }
 
