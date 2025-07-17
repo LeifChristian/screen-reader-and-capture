@@ -1,10 +1,21 @@
 {
-  "name": "electron-queue-watcher",
+  "name": "screen-narrator",
+  "productName": "Screen Narrator",
   "version": "1.0.0",
+  "description": "AI-powered screen monitoring and narration with dual operational modes",
+  "author": "Screen Narrator Team",
   "main": "main.js",
+  "homepage": "https://github.com/your-username/screen-narrator",
   "scripts": {
     "start": "electron .",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "dist": "npm run build",
+    "pack": "electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps"
   },
   "type": "module",
   "dependencies": {
@@ -21,6 +32,98 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
-    "electron": "^29.1.0"
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.screennarrator.app",
+    "productName": "Screen Narrator",
+    "directories": {
+      "output": "dist"
+    },
+    "compression": "normal",
+    "afterSign": false,
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+      "!dist/**/*",
+      "!build/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Screen Narrator"
+    },
+    "portable": {
+      "artifactName": "Screen-Narrator-Portable-${version}.${ext}"
+    },
+    "dmg": {
+      "title": "Screen Narrator ${version}",
+      "artifactName": "Screen-Narrator-${version}.${ext}"
+    },
+    "appImage": {
+      "artifactName": "Screen-Narrator-${version}.${ext}"
+    },
+    "deb": {
+      "artifactName": "Screen-Narrator-${version}.${ext}"
+    }
   }
 }
