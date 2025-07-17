@@ -23,6 +23,8 @@ let currentRegion = null;
 let isAppReady = false;
 
 function createStartupModal() {
+  console.log('🔥 createStartupModal() called');
+
   startupWindow = new BrowserWindow({
     width: 550,
     height: 650,
@@ -36,6 +38,8 @@ function createStartupModal() {
       contextIsolation: false
     }
   });
+
+  console.log('🔥 Startup modal created');
 
   startupWindow.loadFile('startup-modal.html');
 
@@ -68,12 +72,14 @@ function createApiKeyWindow() {
 }
 
 function createMainWindow() {
+  console.log('🔥 createMainWindow() called');
+
   const savedBounds = settingsManager.getWindowBounds();
 
   mainWindow = new BrowserWindow({
     width: savedBounds.width,
     height: savedBounds.height,
-    show: false, // Don't show window initially
+    show: false, // Never show automatically
     webPreferences: {
       preload: path.join(process.cwd(), 'preload.js'),
       nodeIntegration: true,
@@ -81,10 +87,13 @@ function createMainWindow() {
     }
   });
 
+  console.log('🔥 BrowserWindow created, show: false');
+
   // Make mainWindow globally accessible for the narrator
   global.mainWindow = mainWindow;
 
   mainWindow.loadFile('narrator.html');
+  console.log('🔥 Loading narrator.html');
 
   // Save window bounds when resized or moved
   mainWindow.on('resize', () => {
@@ -102,6 +111,8 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     global.mainWindow = null;
   });
+
+  // DO NOT show window automatically - only when user clicks tray
 }
 
 function createRegionSelector() {
@@ -175,6 +186,15 @@ function createRegionOverlay() {
 }
 
 function createTray() {
+  // Destroy existing tray if it exists
+  if (tray) {
+    console.log('🔥 Destroying existing tray');
+    tray.destroy();
+    tray = null;
+  }
+
+  console.log('🔥 Creating new tray');
+
   // Create a simple tray icon
   const trayIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
 
@@ -259,26 +279,15 @@ function createTray() {
     {
       label: 'Show Dashboard',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createMainWindow();
-        }
+        showMainWindow();
       }
     },
     {
       label: '📁 File Manager',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
+        showMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('show-file-manager');
-        } else {
-          createMainWindow();
-          mainWindow.webContents.once('did-finish-load', () => {
-            mainWindow.webContents.send('show-file-manager');
-          });
         }
       }
     },
@@ -319,7 +328,7 @@ function createTray() {
     {
       label: 'Quit',
       click: () => {
-        showQuitDialog();
+        app.quit(); // Direct quit from tray
       }
     }
   ]);
@@ -331,25 +340,31 @@ function createTray() {
   tray.setToolTip(tooltipText);
   tray.setContextMenu(contextMenu);
 
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    } else {
-      createMainWindow();
-    }
+  // Left click to show dashboard
+  tray.on('click', () => {
+    showMainWindow();
   });
+
+  // Double click to show dashboard (backup)
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  console.log('🔥 Tray created successfully');
 }
 
 // Update tray menu when region changes
 function updateTrayMenu() {
   if (tray) {
+    console.log('🔥 Updating tray menu');
     createTray(); // Recreate tray with updated menu
   }
 }
 
 // Handle startup configuration
 function handleStartupConfig(config) {
+  console.log('🔥 handleStartupConfig called with:', config);
+
   appConfig = config;
 
   // Save last used mode
@@ -363,9 +378,13 @@ function handleStartupConfig(config) {
     startupWindow.close();
   }
 
-  // Create main window and tray
+  console.log('🔥 About to create main window and tray');
+
+  // Create main window and tray - but DON'T show window
   createMainWindow();
   createTray();
+
+  console.log('🔥 Main window and tray created - app running in tray');
 
   // Start the narrator
   startNarrator();
@@ -373,6 +392,8 @@ function handleStartupConfig(config) {
 
 // Handle startup with region selection
 function handleStartupWithRegionSelection(config) {
+  console.log('🔥 handleStartupWithRegionSelection called with:', config);
+
   appConfig = config;
 
   // Save last used mode
@@ -386,9 +407,11 @@ function handleStartupWithRegionSelection(config) {
     startupWindow.close();
   }
 
-  // Create main window and tray first
+  // Create main window and tray first - but DON'T show window
   createMainWindow();
   createTray();
+
+  console.log('🔥 Main window created, now showing region selector');
 
   // Show region selector
   createRegionSelector();
@@ -445,6 +468,13 @@ async function showQuitDialog() {
   const sessionData = getSessionData();
 
   if (sessionData.captureCount === 0) {
+    // No session data, quit immediately
+    app.quit();
+    return;
+  }
+
+  // Only show dialog if we have a main window to show it in
+  if (!mainWindow) {
     app.quit();
     return;
   }
@@ -628,12 +658,27 @@ ipcMain.handle('export-session-with-picker', async (event, sessionId, includeScr
 
 // Check API key and continue app initialization
 function checkApiKeyAndContinue() {
+  console.log('🔥 checkApiKeyAndContinue() called');
+  console.log('🔥 IS_DEV:', IS_DEV);
+  console.log('🔥 hasStoredKey:', apiKeyManager.hasStoredKey());
+
   if (IS_DEV || apiKeyManager.hasStoredKey()) {
+    console.log('🔥 API key check passed, setting isAppReady = true');
     isAppReady = true;
+
+    // Only create tray if it doesn't exist
     if (!tray) {
+      console.log('🔥 Creating tray (first time)');
       createTray();
     }
+
+    // If we have an API key but no startup modal, show it
+    if (!startupWindow && !appConfig) {
+      console.log('🔥 No startup modal and no config, creating startup modal');
+      createStartupModal();
+    }
   } else {
+    console.log('🔥 No API key, showing API key setup');
     // Show API key setup
     createApiKeyWindow();
   }
@@ -839,13 +884,17 @@ ipcMain.on('hide-flash-indicator', () => {
 });
 
 app.whenReady().then(() => {
+  console.log('🔥 App ready event fired');
+
   // Load last used region if available
   const lastRegion = settingsManager.getLastUsedRegion();
   if (lastRegion) {
+    console.log('🔥 Loading last used region:', lastRegion);
     currentRegion = lastRegion;
   }
 
   // Check API key first
+  console.log('🔥 Calling checkApiKeyAndContinue');
   checkApiKeyAndContinue();
 });
 
@@ -880,3 +929,18 @@ app.on('before-quit', (event) => {
 
   stopNarrator();
 });
+
+// Helper function to show main window
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+    // Wait for window to be ready before showing
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+      mainWindow.focus();
+    });
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}

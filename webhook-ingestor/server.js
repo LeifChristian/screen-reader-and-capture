@@ -45,6 +45,11 @@ function logWebhookEvent(eventType, data) {
         console.log(`📝 Description: ${data.description}`);
         console.log(`📸 Screenshot: ${data.screenshotPath || 'N/A'}`);
         console.log(`🔢 Capture #: ${data.captureNumber || 'N/A'}`);
+    } else if (eventType === 'TEST') {
+        console.log(`🧪 TEST WEBHOOK EVENT`);
+        console.log(`📝 Description: ${data.description}`);
+        console.log(`📸 Screenshot: ${data.screenshotPath || 'N/A'}`);
+        console.log(`🔢 Capture #: ${data.captureNumber || 'N/A'}`);
     }
 
     console.log(`🎯 Session: ${data.sessionId || 'N/A'}`);
@@ -83,10 +88,10 @@ app.post('/webhook', (req, res) => {
         }
 
         // Validate event type
-        if (!['ALARM', 'CHECKIN'].includes(eventType)) {
+        if (!['ALARM', 'CHECKIN', 'TEST'].includes(eventType)) {
             return res.status(400).json({
                 error: 'Invalid event type',
-                message: 'eventType must be ALARM or CHECKIN',
+                message: 'eventType must be ALARM, CHECKIN, or TEST',
                 timestamp: new Date().toISOString()
             });
         }

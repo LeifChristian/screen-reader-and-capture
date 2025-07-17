@@ -521,6 +521,10 @@
         color: #555;
       }
 
+      .webhook-url-example {
+        margin-top: 5px;
+      }
+
       .webhook-url-input {
         display: flex;
         align-items: center;
@@ -702,12 +706,13 @@
 
               <div class="webhook-url-group">
                 <label for="webhookUrl">Webhook URL:</label>
+                <div class="webhook-url-example">
+                  <small style="color: #666; font-style: italic">
+                    Example: http://localhost:3003/webhook
+                  </small>
+                </div>
                 <div class="webhook-url-input">
-                  <input
-                    type="url"
-                    id="webhookUrl"
-                    placeholder="http://localhost:3003/webhook"
-                  />
+                  <input type="url" id="webhookUrl" />
                   <button class="btn btn-secondary" onclick="testWebhook()">
                     🧪 Test
                   </button>
@@ -1303,10 +1308,12 @@
       // Load webhook settings
       async function loadWebhookSettings() {
         try {
+          console.log("🔗 Loading webhook settings...");
           const result = await ipcRenderer.invoke("get-webhook-settings");
 
           if (result.success) {
             const settings = result.settings;
+            console.log("🔗 Loaded webhook settings:", settings);
 
             document.getElementById("webhookEnabled").checked =
               settings.enabled;
@@ -1318,6 +1325,10 @@
 
             // Enable/disable webhook controls based on enabled state
             toggleWebhookControls(settings.enabled);
+
+            console.log("🔗 Webhook UI updated with loaded settings");
+          } else {
+            console.error("🔗 Failed to load webhook settings:", result.error);
           }
 
           // Load webhook health status
@@ -1412,58 +1423,25 @@
         }
       }
 
-      // Toggle webhook controls based on enabled state
-      function toggleWebhookControls(enabled) {
-        const controls = document.querySelectorAll(
-          "#webhookUrl, #webhookAlarm, #webhookCheckin"
-        );
+      // Test webhook
+      async function testWebhook() {
+        const urlInput = document.getElementById("webhookUrl");
+        const url = urlInput.value.trim();
+
+        if (!url) {
+          // Show error but don't break the input
+          showWebhookStatus("❌ Please enter a webhook URL first", "error");
+          urlInput.focus(); // Refocus the input
+          return;
+        }
+
+        // Disable test button during test
         const testButton = document.querySelector(
           'button[onclick="testWebhook()"]'
         );
-
-        controls.forEach((control) => {
-          control.disabled = !enabled;
-        });
-
-        testButton.disabled = !enabled;
-      }
-
-      // Save webhook settings
-      async function saveWebhookSettings() {
-        const settings = {
-          enabled: document.getElementById("webhookEnabled").checked,
-          url: document.getElementById("webhookUrl").value.trim(),
-          sendOnAlarm: document.getElementById("webhookAlarm").checked,
-          sendOnCheckin: document.getElementById("webhookCheckin").checked,
-        };
-
-        try {
-          const result = await ipcRenderer.invoke(
-            "set-webhook-settings",
-            settings
-          );
-
-          if (result.success) {
-            showWebhookStatus("Webhook settings saved", "success");
-
-            // Update health status after saving settings
-            setTimeout(updateWebhookHealth, 500);
-          } else {
-            alert(`Failed to save webhook settings: ${result.error}`);
-          }
-        } catch (error) {
-          alert(`Error saving webhook settings: ${error.message}`);
-        }
-      }
-
-      // Test webhook
-      async function testWebhook() {
-        const url = document.getElementById("webhookUrl").value.trim();
-
-        if (!url) {
-          alert("Please enter a webhook URL first");
-          return;
-        }
+        const originalText = testButton.textContent;
+        testButton.disabled = true;
+        testButton.textContent = "Testing...";
 
         // Save current settings before testing
         await saveWebhookSettings();
@@ -1489,6 +1467,71 @@
           setTimeout(updateWebhookHealth, 1000);
         } catch (error) {
           showWebhookStatus(`❌ Webhook test error: ${error.message}`, "error");
+        } finally {
+          // Re-enable test button
+          testButton.disabled = false;
+          testButton.textContent = originalText;
+        }
+      }
+
+      // Toggle webhook controls based on enabled state
+      function toggleWebhookControls(enabled) {
+        const urlInput = document.getElementById("webhookUrl");
+        const alarmCheckbox = document.getElementById("webhookAlarm");
+        const checkinCheckbox = document.getElementById("webhookCheckin");
+        const testButton = document.querySelector(
+          'button[onclick="testWebhook()"]'
+        );
+
+        // Enable/disable controls
+        urlInput.disabled = !enabled;
+        alarmCheckbox.disabled = !enabled;
+        checkinCheckbox.disabled = !enabled;
+        testButton.disabled = !enabled;
+
+        // Clear any lingering focus issues
+        if (!enabled) {
+          urlInput.blur();
+        }
+      }
+
+      // Enhanced save webhook settings with better error handling
+      async function saveWebhookSettings() {
+        const urlInput = document.getElementById("webhookUrl");
+        const settings = {
+          enabled: document.getElementById("webhookEnabled").checked,
+          url: urlInput.value.trim(),
+          sendOnAlarm: document.getElementById("webhookAlarm").checked,
+          sendOnCheckin: document.getElementById("webhookCheckin").checked,
+        };
+
+        console.log("🔗 Saving webhook settings:", settings);
+
+        try {
+          const result = await ipcRenderer.invoke(
+            "set-webhook-settings",
+            settings
+          );
+
+          if (result.success) {
+            console.log("🔗 Webhook settings saved successfully");
+            showWebhookStatus("Webhook settings saved", "success");
+
+            // Update health status after saving settings
+            setTimeout(updateWebhookHealth, 500);
+          } else {
+            console.error("🔗 Failed to save webhook settings:", result.error);
+            showWebhookStatus(
+              `Failed to save webhook settings: ${result.error}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("🔗 Error saving webhook settings:", error);
+          showWebhookStatus(
+            `Error saving webhook settings: ${error.message}`,
+            "error"
+          );
         }
       }
 
@@ -1532,15 +1575,30 @@
       // Add event listeners for webhook settings
       document.addEventListener("DOMContentLoaded", () => {
         // Auto-save webhook settings when changed
-        document
-          .getElementById("webhookUrl")
-          .addEventListener("blur", saveWebhookSettings);
-        document
-          .getElementById("webhookAlarm")
-          .addEventListener("change", saveWebhookSettings);
-        document
-          .getElementById("webhookCheckin")
-          .addEventListener("change", saveWebhookSettings);
+        const urlInput = document.getElementById("webhookUrl");
+        const alarmCheckbox = document.getElementById("webhookAlarm");
+        const checkinCheckbox = document.getElementById("webhookCheckin");
+
+        // Use input event for real-time updates and blur for saving
+        urlInput.addEventListener("input", () => {
+          // Clear any error states when user starts typing
+          const statusDiv = document.getElementById("webhookStatus");
+          if (statusDiv.style.display === "block") {
+            statusDiv.style.display = "none";
+          }
+        });
+
+        urlInput.addEventListener("blur", saveWebhookSettings);
+        alarmCheckbox.addEventListener("change", saveWebhookSettings);
+        checkinCheckbox.addEventListener("change", saveWebhookSettings);
+
+        // Handle Enter key in URL input
+        urlInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            testWebhook();
+          }
+        });
       });
     </script>
   </body>
