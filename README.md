@@ -1,170 +1,308 @@
-# 🔍 Queue Watcher - Electron Background Monitor
+# 🎙️ Screen Narrator - AI-Powered Screen Monitoring
 
-An Electron application that runs in the background, monitors your screen for queue numbers, and alerts you when your position reaches critical thresholds.
+An advanced Electron application that provides AI-powered screen monitoring and narration with dual operational modes, comprehensive session management, and intelligent alerting capabilities.
 
 ## ✨ Features
 
-- **Background Monitoring**: Runs in system tray, continuously watching your screen
-- **AI-Powered OCR**: Uses OpenAI Vision API to extract queue numbers from screenshots
-- **Smart Alerts**: Notifications at queue positions 10, 9, 8, and 5
-- **Sound Notifications**: Plays your custom sound file when alerts trigger
-- **Database Logging**: All queue data logged to SQLite database
-- **Windows Optimized**: Designed specifically for Windows environment
+### 🎯 Dual Operational Modes
 
-## 🚀 Setup Instructions
+- **Check-in Mode**: Continuous, verbose screen narration for accessibility and monitoring
+- **Notification Mode**: Intelligent detection and alerting for specific content or events
+
+### 🤖 AI-Powered Intelligence
+
+- **OpenAI Vision API**: Advanced image analysis with GPT-4 Vision
+- **Smart Detection**: Sensitive to text, images, names, references, and related content
+- **Context Awareness**: Maintains conversation history for continuity in check-in mode
+
+### 📱 Advanced User Interface
+
+- **Dashboard**: Real-time statistics, capture history, and configuration
+- **File Manager**: Complete session management with export capabilities
+- **Startup Modal**: Easy mode selection and configuration
+- **System Tray**: Quick access with intuitive click behaviors
+
+### 🔊 Audio & Visual Feedback
+
+- **Volume Control**: Integrated system volume management
+- **Visual Flash Indicator**: Screen-wide blue flash for alarm notifications
+- **Text-to-Speech**: Natural voice narration of screen content
+- **Sound Alerts**: Custom alarm sounds for notifications
+
+### 🎯 Flexible Targeting
+
+- **Region Selection**: Monitor specific screen areas with visual overlay
+- **Full Screen**: Complete screen monitoring capability
+- **Dynamic Switching**: Change regions without restarting sessions
+
+### 🔗 Integration & Automation
+
+- **Webhook Support**: HTTP notifications with retry logic and circuit breaker
+- **Session Export**: Text-only or complete ZIP archives with screenshots
+- **Persistent Settings**: Encrypted storage of preferences and configurations
+
+## 🚀 Quick Start
 
 ### 1. Prerequisites
 
-Make sure you have:
-
 - **Node.js** (v18 or higher)
 - **OpenAI API Key** (with GPT-4 Vision access)
-- **Windows 10/11** (tested environment)
+- **Windows 10/11** (primary platform)
 
 ### 2. Installation
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd screen-narrator
+
 # Install dependencies
 npm install
 
-# Run setup script
-npm run setup
-```
-
-### 3. Configuration
-
-The setup script will check for:
-
-- ✅ `sound.wav` file in the project directory
-- ✅ Valid OpenAI API key in `.env` file
-- ✅ Sound playback functionality
-
-### 4. Start the Application
-
-```bash
+# Start the application
 npm start
 ```
 
-The app will:
+### 3. Initial Setup
 
-- Launch in the background (system tray)
-- Begin monitoring your screen every 30 seconds
-- Show a dashboard window (can be minimized)
+1. **API Key Configuration**: Enter your OpenAI API key in the setup modal
+2. **Mode Selection**: Choose between Check-in or Notification mode
+3. **Region Selection**: Optionally select a specific screen region to monitor
+4. **Start Monitoring**: Begin your AI-powered screen monitoring session
 
-## 🎯 How It Works
+## 🎮 Usage Guide
 
-1. **Screenshot Capture**: Takes periodic screenshots of your entire screen
-2. **AI Processing**: Sends images to OpenAI Vision API to extract queue numbers
-3. **Alert Logic**: Triggers notifications when queue position reaches 10, 9, 8, or 5
-4. **Sound Alerts**: Plays `sound.wav` file for each alert
-5. **Data Logging**: Saves all queue data to `queue_log.db` and `queue-watcher.log`
+### System Tray Controls
 
-## 📊 Dashboard Features
+- **Left Click**: Open dashboard
+- **Right Click**: Show volume control
+- **Double Click**: Toggle mute/unmute
+- **Context Menu**: Access all features and settings
 
-- **Real-time Status**: Current queue position and last check time
-- **Alert Settings**: Shows configured notification thresholds
-- **Recent Logs**: History of detected queue numbers
-- **Controls**: Test sound, manual check, clear logs
+### Dashboard Features
 
-## 🔧 System Tray Options
+- **Real-time Statistics**: Captures, mode, region, and frequency
+- **Configure New Session**: Start fresh monitoring sessions
+- **Frequency Control**: Adjust capture intervals (10 seconds to 7 days)
+- **Webhook Configuration**: Set up HTTP notifications
+- **Recent Captures**: Visual history with alarm indicators
 
-Right-click the tray icon to access:
+### File Manager
 
-- **Show Dashboard**: Open the main window
-- **Status**: Current monitoring status
-- **Quit**: Exit the application
+- **Session Overview**: Browse all monitoring sessions
+- **Export Options**: Text-only or complete ZIP exports
+- **Storage Statistics**: Monitor disk usage and file counts
+- **Session Cleanup**: Delete old sessions to free space
 
-## 📁 Files Generated
+## 🔧 Configuration Options
 
-- `queue_log.db` - SQLite database with all queue data
-- `queue-watcher.log` - Application log file
-- `screenshot.png` - Latest screenshot (temporary)
+### Capture Frequency
 
-## ⚙️ Configuration
+- **Range**: 10 seconds to 7 days
+- **Units**: Seconds, minutes, hours, days
+- **Default**: 5 minutes
+- **Dynamic**: Change without restarting sessions
 
-### Alert Thresholds
+### Notification Mode Setup
 
-Currently set to: **10, 9, 8, 5**
-
-To modify, edit the `ALERT_NUMBERS` array in `capture.js`:
-
-```javascript
-const ALERT_NUMBERS = [10, 9, 8, 5]; // Customize these values
+```
+Target: "michael jackson"
+Sensitivity: High (detects text, images, references)
+Response: [ALARM] + brief description or "Target not detected"
 ```
 
-### Check Interval
+### Check-in Mode Setup
 
-Default: 30 seconds (for testing)
-
-To modify, edit `INTERVAL_MS` in `capture.js`:
-
-```javascript
-const INTERVAL_MS = 60 * 1000; // 30 seconds
+```
+Narration: Continuous, verbose descriptions
+Context: Maintains history of last 3 captures
+Voice: Text-to-speech with natural speech patterns
 ```
 
-## 🔊 Sound Requirements
+### Webhook Configuration
 
-- Place your `sound.wav` file in the project root directory
-- Supported formats: WAV (recommended for Windows)
-- The setup script will test sound playback
+```
+URL: http://localhost:3003/webhook
+Events: ALARM and/or CHECKIN
+Retry: 3 attempts with exponential backoff
+Circuit Breaker: Auto-disable after 5 failures
+```
+
+## 📊 Session Management
+
+### Export Formats
+
+- **Text Only**: Descriptions and timestamps in `.txt` format
+- **Complete Archive**: ZIP file with descriptions and all screenshots
+
+### Storage Structure
+
+```
+sessions/
+├── [session-id]/
+│   ├── screenshots/
+│   │   ├── capture_001_[timestamp].png
+│   │   └── capture_002_[timestamp].png
+│   ├── descriptions.txt
+│   └── session.log
+```
+
+### Data Retention
+
+- **Automatic Cleanup**: Optional session deletion
+- **Export Before Delete**: Preserve important sessions
+- **Storage Monitoring**: Track disk usage in dashboard
+
+## 🔗 Webhook Integration
+
+### Payload Structure
+
+```json
+{
+  "eventType": "ALARM" | "CHECKIN",
+  "data": {
+    "description": "AI-generated description",
+    "screenshotPath": "/path/to/screenshot.png",
+    "captureNumber": 42,
+    "sessionId": "uuid-session-id",
+    "eventTimestamp": "2024-01-01T12:00:00.000Z",
+    "mode": "notification" | "checkin"
+  }
+}
+```
+
+### Example Webhook Server
+
+A sample webhook server is included in `/webhook-ingestor/` with:
+
+- Express.js server on port 3003
+- Comprehensive logging and error handling
+- Health check endpoints
+- Security headers and validation
+
+## 🛠️ Advanced Features
+
+### Region Selection
+
+1. Click "Select Target Region" in tray menu
+2. Draw selection rectangle on screen
+3. Visual overlay shows selected area
+4. Monitor only the targeted region
+
+### Volume Control
+
+- **Integrated Controls**: System volume management
+- **Quick Access**: Right-click tray for volume slider
+- **Keyboard Shortcuts**: Arrow keys, spacebar, escape
+- **Auto-hide**: Slider disappears after 5 seconds
+
+### Flash Indicator
+
+- **Visual Feedback**: Blue screen border flash on alarms
+- **Duration**: 5 seconds with 0.5-second intervals
+- **Concurrent**: Synchronized with alarm sound
+- **Non-intrusive**: Transparent, click-through overlay
+
+## 🔐 Security & Privacy
+
+### API Key Management
+
+- **Encrypted Storage**: AES encryption for stored keys
+- **Development Mode**: Bypass for local development
+- **Validation**: Test keys before saving
+- **Secure Transmission**: HTTPS-only API communication
+
+### Data Protection
+
+- **Local Storage**: All data stored locally
+- **No Cloud Sync**: Complete privacy control
+- **Encrypted Settings**: User preferences encrypted
+- **Session Isolation**: Each session in separate directory
 
 ## 🛠️ Troubleshooting
 
 ### Common Issues
 
-1. **Sound Not Playing**
+**API Key Problems**
 
-   - Ensure `sound.wav` exists in project directory
-   - Check Windows audio settings
-   - Run `npm run setup` to test sound
+- Verify key has GPT-4 Vision access
+- Check OpenAI account credits
+- Test key in API key settings
 
-2. **No Queue Numbers Detected**
+**Screenshot Issues**
 
-   - Verify OpenAI API key is valid
-   - Check if queue numbers are clearly visible on screen
-   - Review logs in `queue-watcher.log`
+- Check Windows privacy settings
+- Ensure screen recording permissions
+- Try running as administrator
 
-3. **Screenshot Issues**
-   - Ensure Windows allows screen capture
-   - Check Windows Privacy settings for screen recording
-   - Try running as administrator
+**Audio Problems**
 
-### Logs and Debugging
+- Verify sound.wav file exists
+- Check Windows audio settings
+- Test volume control functionality
 
-- Check `queue-watcher.log` for detailed application logs
-- Database logs are in `queue_log.db` (can be viewed with SQLite browser)
-- Console logs appear in the Electron DevTools
+**Performance Issues**
 
-## 📱 Windows Permissions
+- Adjust capture frequency
+- Clean up old sessions
+- Monitor system resources
 
-The app may need permissions for:
+### Debug Information
 
-- **Screen capture** (Windows Privacy Settings)
-- **Sound playback** (Windows Audio Settings)
-- **File system access** (for logging and database)
+- **Session Logs**: Detailed logging in each session folder
+- **Console Output**: Real-time debugging information
+- **Error Handling**: Comprehensive error reporting
+- **Health Monitoring**: Webhook circuit breaker status
 
-## 🔄 Updates and Maintenance
+## 📱 System Requirements
 
-- Queue data is automatically archived in the database
-- Log files rotate to prevent disk space issues
-- Screenshots are temporary and overwritten each check
+### Minimum Requirements
 
-## 🆘 Support
+- **OS**: Windows 10/11 (primary), macOS/Linux (experimental)
+- **Memory**: 4GB RAM
+- **Storage**: 1GB free space
+- **Network**: Internet connection for OpenAI API
 
-If you encounter issues:
+### Recommended
 
-1. Run `npm run setup` to verify configuration
-2. Check the log files for error messages
-3. Ensure all permissions are granted
-4. Verify OpenAI API key has sufficient credits
+- **Memory**: 8GB RAM for smooth operation
+- **Storage**: 5GB for extensive session history
+- **Display**: Multiple monitors supported
+- **Audio**: Speakers/headphones for alerts
 
-## 🎮 Usage Tips
+## 🔄 Updates & Maintenance
 
-- **Minimize to tray**: Close the dashboard window to run purely in background
-- **Test alerts**: Use the "Test Sound" button to verify audio works
-- **Monitor logs**: Keep an eye on the Recent Logs section for issues
-- **Adjust timing**: Modify check interval based on your queue's update frequency
+### Regular Maintenance
+
+- **Clean Sessions**: Export and delete old sessions
+- **Monitor Storage**: Check disk usage in file manager
+- **Update Dependencies**: Keep packages current
+- **API Usage**: Monitor OpenAI token consumption
+
+### Backup Recommendations
+
+- **Export Sessions**: Regular exports of important sessions
+- **Settings Backup**: Copy settings files before updates
+- **Screenshot Archives**: Maintain external backups if needed
+
+## 🆘 Support & Contributing
+
+### Getting Help
+
+1. Check the troubleshooting section
+2. Review session logs for errors
+3. Test with minimal configuration
+4. Verify all permissions are granted
+
+### Development
+
+- **Architecture**: Electron + Node.js
+- **AI Integration**: OpenAI Vision API
+- **Storage**: File-based with encryption
+- **UI Framework**: Vanilla HTML/CSS/JavaScript
 
 ---
 
-**Note**: This application is designed for Windows environments and requires an active OpenAI API key with GPT-4 Vision access.
+**Built with ❤️ for accessibility, monitoring, and automation**
+
+_Screen Narrator provides powerful AI-driven screen monitoring capabilities while maintaining complete user privacy and control._
