@@ -474,6 +474,121 @@
         align-items: center;
         gap: 10px;
       }
+
+      /* Webhook Settings Styles */
+      .webhook-settings {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      }
+
+      .webhook-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      .webhook-enabled {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .webhook-enabled label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.9em;
+        color: #555;
+      }
+
+      .webhook-enabled input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #2196f3; /* Customize checkbox color */
+      }
+
+      .webhook-url-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .webhook-url-group label {
+        font-size: 0.9em;
+        color: #555;
+      }
+
+      .webhook-url-input {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .webhook-url-input input[type="url"] {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1em;
+      }
+
+      .webhook-events {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        font-size: 0.9em;
+        color: #555;
+      }
+
+      .webhook-events label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .webhook-checkboxes {
+        display: flex;
+        gap: 15px;
+      }
+
+      .webhook-checkboxes label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .webhook-checkboxes input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #2196f3; /* Customize checkbox color */
+      }
+
+      .webhook-health {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #eee;
+        border-radius: 5px;
+        background: #f9f9f9;
+        font-size: 0.85em;
+        color: #666;
+      }
+
+      .webhook-health-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .webhook-health-indicator {
+        font-size: 1em;
+      }
+
+      .webhook-health-message {
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -571,6 +686,69 @@
             </div>
           </div>
 
+          <div class="webhook-settings">
+            <h3>🔗 Webhook Configuration</h3>
+            <div class="webhook-controls">
+              <div class="webhook-enabled">
+                <label>
+                  <input
+                    type="checkbox"
+                    id="webhookEnabled"
+                    onchange="toggleWebhook()"
+                  />
+                  Enable Webhook Notifications
+                </label>
+              </div>
+
+              <div class="webhook-url-group">
+                <label for="webhookUrl">Webhook URL:</label>
+                <div class="webhook-url-input">
+                  <input
+                    type="url"
+                    id="webhookUrl"
+                    placeholder="http://localhost:3003/webhook"
+                  />
+                  <button class="btn btn-secondary" onclick="testWebhook()">
+                    🧪 Test
+                  </button>
+                </div>
+              </div>
+
+              <div class="webhook-events">
+                <label>Send webhook for:</label>
+                <div class="webhook-checkboxes">
+                  <label>
+                    <input type="checkbox" id="webhookAlarm" checked />
+                    🚨 Alarm Events
+                  </label>
+                  <label>
+                    <input type="checkbox" id="webhookCheckin" />
+                    ✅ Check-in Events
+                  </label>
+                </div>
+              </div>
+
+              <div class="webhook-health" id="webhookHealth">
+                <div class="webhook-health-status">
+                  <span
+                    class="webhook-health-indicator"
+                    id="webhookHealthIndicator"
+                    >●</span
+                  >
+                  <span id="webhookHealthMessage">Loading...</span>
+                </div>
+              </div>
+
+              <div
+                class="webhook-status"
+                id="webhookStatus"
+                style="display: none"
+              >
+                <small></small>
+              </div>
+            </div>
+          </div>
+
           <div class="captures-container">
             <h3>Recent Captures</h3>
             <div id="capturesList">
@@ -656,6 +834,9 @@
         try {
           const sessionData = await ipcRenderer.invoke("get-session-data");
           updateDashboard(sessionData);
+
+          // Load webhook settings
+          await loadWebhookSettings();
         } catch (error) {
           console.error("Error loading dashboard:", error);
         }
@@ -1088,6 +1269,9 @@
       window.addEventListener("load", () => {
         updateMaxValue(); // Initialize max value for frequency input
         loadDashboard();
+
+        // Update webhook health every 30 seconds
+        setInterval(updateWebhookHealth, 30000);
       });
 
       // Reset settings to defaults
@@ -1115,6 +1299,249 @@
           alert(`Error resetting settings: ${error.message}`);
         }
       }
+
+      // Load webhook settings
+      async function loadWebhookSettings() {
+        try {
+          const result = await ipcRenderer.invoke("get-webhook-settings");
+
+          if (result.success) {
+            const settings = result.settings;
+
+            document.getElementById("webhookEnabled").checked =
+              settings.enabled;
+            document.getElementById("webhookUrl").value = settings.url || "";
+            document.getElementById("webhookAlarm").checked =
+              settings.sendOnAlarm;
+            document.getElementById("webhookCheckin").checked =
+              settings.sendOnCheckin;
+
+            // Enable/disable webhook controls based on enabled state
+            toggleWebhookControls(settings.enabled);
+          }
+
+          // Load webhook health status
+          await updateWebhookHealth();
+        } catch (error) {
+          console.error("Error loading webhook settings:", error);
+        }
+      }
+
+      // Update webhook health status
+      async function updateWebhookHealth() {
+        try {
+          const result = await ipcRenderer.invoke("get-webhook-health");
+
+          if (result.success) {
+            const health = result.health;
+            const indicator = document.getElementById("webhookHealthIndicator");
+            const message = document.getElementById("webhookHealthMessage");
+
+            // Update health indicator based on status
+            switch (health.status) {
+              case "healthy":
+                indicator.style.color = "#28a745"; // Green
+                indicator.textContent = "●";
+                message.textContent = health.message;
+                break;
+
+              case "degraded":
+                indicator.style.color = "#ffc107"; // Yellow
+                indicator.textContent = "●";
+                message.textContent = health.message;
+                break;
+
+              case "circuit_open":
+                indicator.style.color = "#dc3545"; // Red
+                indicator.textContent = "●";
+                message.textContent = `${health.message} (retry in ${health.retryIn}s)`;
+                break;
+
+              case "disabled":
+                indicator.style.color = "#6c757d"; // Gray
+                indicator.textContent = "○";
+                message.textContent = health.message;
+                break;
+
+              case "not_configured":
+                indicator.style.color = "#6c757d"; // Gray
+                indicator.textContent = "○";
+                message.textContent = health.message;
+                break;
+
+              default:
+                indicator.style.color = "#6c757d"; // Gray
+                indicator.textContent = "?";
+                message.textContent = "Unknown status";
+            }
+          }
+        } catch (error) {
+          console.error("Error updating webhook health:", error);
+          const indicator = document.getElementById("webhookHealthIndicator");
+          const message = document.getElementById("webhookHealthMessage");
+
+          indicator.style.color = "#dc3545"; // Red
+          indicator.textContent = "●";
+          message.textContent = "Health check failed";
+        }
+      }
+
+      // Toggle webhook enabled state
+      async function toggleWebhook() {
+        const enabled = document.getElementById("webhookEnabled").checked;
+
+        try {
+          const result = await ipcRenderer.invoke("set-webhook-settings", {
+            enabled: enabled,
+          });
+
+          if (result.success) {
+            toggleWebhookControls(enabled);
+            showWebhookStatus(
+              enabled ? "Webhook enabled" : "Webhook disabled",
+              "success"
+            );
+
+            // Update health status after enabling/disabling
+            setTimeout(updateWebhookHealth, 500);
+          } else {
+            alert(`Failed to update webhook settings: ${result.error}`);
+          }
+        } catch (error) {
+          alert(`Error updating webhook settings: ${error.message}`);
+        }
+      }
+
+      // Toggle webhook controls based on enabled state
+      function toggleWebhookControls(enabled) {
+        const controls = document.querySelectorAll(
+          "#webhookUrl, #webhookAlarm, #webhookCheckin"
+        );
+        const testButton = document.querySelector(
+          'button[onclick="testWebhook()"]'
+        );
+
+        controls.forEach((control) => {
+          control.disabled = !enabled;
+        });
+
+        testButton.disabled = !enabled;
+      }
+
+      // Save webhook settings
+      async function saveWebhookSettings() {
+        const settings = {
+          enabled: document.getElementById("webhookEnabled").checked,
+          url: document.getElementById("webhookUrl").value.trim(),
+          sendOnAlarm: document.getElementById("webhookAlarm").checked,
+          sendOnCheckin: document.getElementById("webhookCheckin").checked,
+        };
+
+        try {
+          const result = await ipcRenderer.invoke(
+            "set-webhook-settings",
+            settings
+          );
+
+          if (result.success) {
+            showWebhookStatus("Webhook settings saved", "success");
+
+            // Update health status after saving settings
+            setTimeout(updateWebhookHealth, 500);
+          } else {
+            alert(`Failed to save webhook settings: ${result.error}`);
+          }
+        } catch (error) {
+          alert(`Error saving webhook settings: ${error.message}`);
+        }
+      }
+
+      // Test webhook
+      async function testWebhook() {
+        const url = document.getElementById("webhookUrl").value.trim();
+
+        if (!url) {
+          alert("Please enter a webhook URL first");
+          return;
+        }
+
+        // Save current settings before testing
+        await saveWebhookSettings();
+
+        showWebhookStatus("Testing webhook...", "info");
+
+        try {
+          const result = await ipcRenderer.invoke("test-webhook", url);
+
+          if (result.success) {
+            showWebhookStatus(
+              `✅ Webhook test successful! Status: ${result.status}`,
+              "success"
+            );
+          } else {
+            showWebhookStatus(
+              `❌ Webhook test failed: ${result.error}`,
+              "error"
+            );
+          }
+
+          // Update health status after test
+          setTimeout(updateWebhookHealth, 1000);
+        } catch (error) {
+          showWebhookStatus(`❌ Webhook test error: ${error.message}`, "error");
+        }
+      }
+
+      // Show webhook status message
+      function showWebhookStatus(message, type) {
+        const statusDiv = document.getElementById("webhookStatus");
+        const statusText = statusDiv.querySelector("small");
+
+        statusText.textContent = message;
+        statusDiv.style.display = "block";
+
+        // Set color based on type
+        switch (type) {
+          case "success":
+            statusDiv.style.backgroundColor = "#d4edda";
+            statusDiv.style.borderColor = "#c3e6cb";
+            statusDiv.style.color = "#155724";
+            break;
+          case "error":
+            statusDiv.style.backgroundColor = "#f8d7da";
+            statusDiv.style.borderColor = "#f5c6cb";
+            statusDiv.style.color = "#721c24";
+            break;
+          case "info":
+            statusDiv.style.backgroundColor = "#d1ecf1";
+            statusDiv.style.borderColor = "#b8daff";
+            statusDiv.style.color = "#0c5460";
+            break;
+          default:
+            statusDiv.style.backgroundColor = "#f9f9f9";
+            statusDiv.style.borderColor = "#eee";
+            statusDiv.style.color = "#666";
+        }
+
+        // Hide after 5 seconds
+        setTimeout(() => {
+          statusDiv.style.display = "none";
+        }, 5000);
+      }
+
+      // Add event listeners for webhook settings
+      document.addEventListener("DOMContentLoaded", () => {
+        // Auto-save webhook settings when changed
+        document
+          .getElementById("webhookUrl")
+          .addEventListener("blur", saveWebhookSettings);
+        document
+          .getElementById("webhookAlarm")
+          .addEventListener("change", saveWebhookSettings);
+        document
+          .getElementById("webhookCheckin")
+          .addEventListener("change", saveWebhookSettings);
+      });
     </script>
   </body>
 </html>

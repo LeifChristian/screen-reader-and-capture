@@ -16,6 +16,14 @@ class SettingsManager {
             windowBounds: {
                 width: 1000,
                 height: 700
+            },
+            webhook: {
+                enabled: false,
+                url: '',
+                sendOnAlarm: true,
+                sendOnCheckin: false,
+                timeout: 5000, // 5 seconds timeout
+                retries: 3
             }
         };
 
@@ -146,6 +154,32 @@ class SettingsManager {
     // Get all settings
     getAllSettings() {
         return { ...this.settings };
+    }
+
+    // Get webhook settings
+    getWebhookSettings() {
+        return this.settings.webhook;
+    }
+
+    // Set webhook settings
+    setWebhookSettings(webhookSettings) {
+        this.settings.webhook = { ...this.settings.webhook, ...webhookSettings };
+        this.saveSettings();
+        return this.settings.webhook;
+    }
+
+    // Enable/disable webhook
+    setWebhookEnabled(enabled) {
+        this.settings.webhook.enabled = enabled;
+        this.saveSettings();
+        return this.settings.webhook;
+    }
+
+    // Set webhook URL
+    setWebhookUrl(url) {
+        this.settings.webhook.url = url;
+        this.saveSettings();
+        return this.settings.webhook;
     }
 }
 

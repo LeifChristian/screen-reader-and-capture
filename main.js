@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, screen } from 'electron';
 import path from 'path';
 import dotenv from 'dotenv';
-import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion, setCaptureFrequency, getCaptureFrequency } from './screen-narrator.js';
+import fetch from 'node-fetch';
+import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion, setCaptureFrequency, getCaptureFrequency, getWebhookHealthStatus } from './screen-narrator.js';
 import apiKeyManager from './api-key-manager.js';
 import sessionManager from './session-manager.js';
 import settingsManager from './settings-manager.js';
@@ -701,6 +702,89 @@ ipcMain.handle('reset-settings', () => {
   try {
     const settings = settingsManager.resetToDefaults();
     return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handlers for webhook management
+ipcMain.handle('get-webhook-settings', () => {
+  try {
+    return { success: true, settings: settingsManager.getWebhookSettings() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-webhook-health', () => {
+  try {
+    return { success: true, health: getWebhookHealthStatus() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('set-webhook-settings', (event, webhookSettings) => {
+  try {
+    const settings = settingsManager.setWebhookSettings(webhookSettings);
+    return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('test-webhook', async (event, webhookUrl) => {
+  try {
+    const testPayload = {
+      eventType: 'TEST',
+      data: {
+        description: 'This is a test webhook from Screen Narrator',
+        screenshotPath: null,
+        captureNumber: 0,
+        sessionId: 'test-session',
+        eventTimestamp: new Date().toISOString(),
+        mode: 'test'
+      }
+    };
+
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for tests
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Screen-Narrator-Webhook/1.0'
+        },
+        body: JSON.stringify(testPayload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (jsonError) {
+          responseData = { status: 'received', note: 'Non-JSON response' };
+        }
+        return { success: true, status: response.status, response: responseData };
+      } else {
+        const errorData = await response.text();
+        return { success: false, status: response.status, error: errorData };
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      if (fetchError.name === 'AbortError') {
+        return { success: false, error: 'Request timeout (10 seconds)' };
+      }
+
+      return { success: false, error: fetchError.message };
+    }
   } catch (error) {
     return { success: false, error: error.message };
   }

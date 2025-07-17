@@ -283,6 +283,261 @@ Remember: Only include [ALARM] if you're confident you found what they're specif
     }
 }
 
+// Webhook functionality with comprehensive error handling
+async function sendWebhook(eventType, data) {
+    // Early return if webhook is not configured - don't log as error
+    try {
+        const webhookSettings = settingsManager.getWebhookSettings();
+
+        // Check if webhook is enabled
+        if (!webhookSettings.enabled) {
+            return { success: false, reason: 'Webhook disabled', silent: true };
+        }
+
+        // Check if URL is configured
+        if (!webhookSettings.url || webhookSettings.url.trim() === '') {
+            return { success: false, reason: 'Webhook URL not configured', silent: true };
+        }
+
+        // Validate URL format
+        let webhookUrl;
+        try {
+            webhookUrl = new URL(webhookSettings.url.trim());
+        } catch (urlError) {
+            logger.warn(`Invalid webhook URL format: ${webhookSettings.url}`);
+            return { success: false, reason: 'Invalid webhook URL format', error: urlError.message };
+        }
+
+        // Check if we should send for this event type
+        if (eventType === 'ALARM' && !webhookSettings.sendOnAlarm) {
+            return { success: false, reason: 'Webhook not configured for ALARM events', silent: true };
+        }
+
+        if (eventType === 'CHECKIN' && !webhookSettings.sendOnCheckin) {
+            return { success: false, reason: 'Webhook not configured for CHECKIN events', silent: true };
+        }
+
+        // Prepare payload with safe data extraction
+        const payload = {
+            eventType,
+            data: {
+                description: data.description || 'No description available',
+                screenshotPath: data.path || null,
+                captureNumber: data.captureNumber || 0,
+                sessionId: SESSION_ID,
+                eventTimestamp: data.timestamp || new Date().toISOString(),
+                mode: appConfig.mode || 'unknown'
+            }
+        };
+
+        logger.info(`Sending webhook to ${webhookUrl.href} for ${eventType} event`);
+
+        // Create AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), webhookSettings.timeout || 5000);
+
+        try {
+            const response = await fetch(webhookUrl.href, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Screen-Narrator-Webhook/1.0',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                let responseData;
+                try {
+                    responseData = await response.json();
+                } catch (jsonError) {
+                    // If response isn't JSON, that's okay - just log the status
+                    responseData = { status: 'received', note: 'Non-JSON response' };
+                }
+
+                logger.info(`Webhook sent successfully: ${response.status} ${response.statusText}`);
+                return {
+                    success: true,
+                    response: responseData,
+                    status: response.status,
+                    statusText: response.statusText
+                };
+            } else {
+                // Handle HTTP error responses gracefully
+                let errorData;
+                try {
+                    errorData = await response.text();
+                } catch (textError) {
+                    errorData = 'Unable to read error response';
+                }
+
+                logger.warn(`Webhook failed with HTTP ${response.status}: ${response.statusText} - ${errorData}`);
+                return {
+                    success: false,
+                    error: `HTTP ${response.status}: ${response.statusText}`,
+                    details: errorData,
+                    status: response.status
+                };
+            }
+
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+
+            // Handle different types of fetch errors
+            if (fetchError.name === 'AbortError') {
+                logger.warn(`Webhook timeout after ${webhookSettings.timeout || 5000}ms`);
+                return { success: false, error: 'Request timeout', timeout: true };
+            }
+
+            if (fetchError.code === 'ECONNREFUSED') {
+                logger.warn(`Webhook connection refused - server may be down`);
+                return { success: false, error: 'Connection refused - server may be down', connectionError: true };
+            }
+
+            if (fetchError.code === 'ENOTFOUND') {
+                logger.warn(`Webhook host not found: ${webhookUrl.hostname}`);
+                return { success: false, error: 'Host not found', dnsError: true };
+            }
+
+            // Generic network error
+            logger.warn(`Webhook network error: ${fetchError.message}`);
+            return { success: false, error: fetchError.message, networkError: true };
+        }
+
+    } catch (error) {
+        // Catch any unexpected errors in webhook processing
+        logger.error(`Unexpected webhook error: ${error.message}`);
+        return { success: false, error: error.message, unexpected: true };
+    }
+}
+
+// Webhook circuit breaker state
+let webhookCircuitBreaker = {
+    failures: 0,
+    lastFailureTime: null,
+    isOpen: false,
+    threshold: 5, // Open circuit after 5 consecutive failures
+    timeout: 300000, // 5 minutes before attempting to close circuit
+    halfOpenAttempts: 0,
+    maxHalfOpenAttempts: 3
+};
+
+// Reset circuit breaker on successful webhook
+function resetWebhookCircuitBreaker() {
+    webhookCircuitBreaker.failures = 0;
+    webhookCircuitBreaker.lastFailureTime = null;
+    webhookCircuitBreaker.isOpen = false;
+    webhookCircuitBreaker.halfOpenAttempts = 0;
+    logger.info('Webhook circuit breaker reset - webhooks re-enabled');
+}
+
+// Handle circuit breaker logic
+function handleWebhookCircuitBreaker(success, error = null) {
+    if (success) {
+        if (webhookCircuitBreaker.isOpen || webhookCircuitBreaker.failures > 0) {
+            logger.info('Webhook recovered - resetting circuit breaker');
+            resetWebhookCircuitBreaker();
+        }
+        return { allowed: true };
+    }
+
+    // Handle failure
+    webhookCircuitBreaker.failures++;
+    webhookCircuitBreaker.lastFailureTime = Date.now();
+
+    // Check if we should open the circuit
+    if (webhookCircuitBreaker.failures >= webhookCircuitBreaker.threshold) {
+        if (!webhookCircuitBreaker.isOpen) {
+            webhookCircuitBreaker.isOpen = true;
+            logger.warn(`Webhook circuit breaker opened after ${webhookCircuitBreaker.failures} failures - webhooks temporarily disabled`);
+        }
+        return { allowed: false, reason: 'Circuit breaker open' };
+    }
+
+    return { allowed: true };
+}
+
+// Check if circuit breaker should transition to half-open
+function checkWebhookCircuitBreakerState() {
+    if (!webhookCircuitBreaker.isOpen) {
+        return { state: 'closed', allowed: true };
+    }
+
+    const timeSinceFailure = Date.now() - webhookCircuitBreaker.lastFailureTime;
+
+    if (timeSinceFailure >= webhookCircuitBreaker.timeout) {
+        if (webhookCircuitBreaker.halfOpenAttempts < webhookCircuitBreaker.maxHalfOpenAttempts) {
+            webhookCircuitBreaker.halfOpenAttempts++;
+            logger.info(`Webhook circuit breaker half-open - attempting test request (${webhookCircuitBreaker.halfOpenAttempts}/${webhookCircuitBreaker.maxHalfOpenAttempts})`);
+            return { state: 'half-open', allowed: true };
+        }
+    }
+
+    return { state: 'open', allowed: false, reason: 'Circuit breaker open' };
+}
+
+// Enhanced webhook sending with circuit breaker
+async function sendWebhookWithRetry(eventType, data) {
+    // Check circuit breaker state first
+    const circuitState = checkWebhookCircuitBreakerState();
+    if (!circuitState.allowed) {
+        return {
+            success: false,
+            reason: circuitState.reason,
+            circuitBreakerOpen: true,
+            silent: true // Don't log as error
+        };
+    }
+
+    const webhookSettings = settingsManager.getWebhookSettings();
+    const maxRetries = webhookSettings.retries || 3;
+    let lastResult = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const result = await sendWebhook(eventType, data);
+        lastResult = result;
+
+        // If webhook is disabled or not configured, don't retry and don't affect circuit breaker
+        if (result.silent) {
+            return result;
+        }
+
+        // If successful, update circuit breaker and return
+        if (result.success) {
+            handleWebhookCircuitBreaker(true);
+            if (attempt > 1) {
+                logger.info(`Webhook succeeded on attempt ${attempt}`);
+            }
+            return result;
+        }
+
+        // If this was the last attempt, handle circuit breaker and return failure
+        if (attempt === maxRetries) {
+            handleWebhookCircuitBreaker(false, result.error);
+            logger.warn(`Webhook failed after ${maxRetries} attempts: ${result.error}`);
+            return result;
+        }
+
+        // For retryable errors, wait before next attempt
+        if (result.timeout || result.connectionError || result.networkError) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+            logger.info(`Webhook attempt ${attempt} failed, retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+            // For non-retryable errors (like invalid URL, HTTP 4xx), don't retry
+            handleWebhookCircuitBreaker(false, result.error);
+            logger.warn(`Webhook failed with non-retryable error: ${result.error}`);
+            return result;
+        }
+    }
+
+    return lastResult;
+}
+
 // Main capture and narrate function
 async function captureAndNarrate() {
     if (isNarrating) {
@@ -351,6 +606,14 @@ async function captureAndNarrate() {
             // Play alarm sound
             await playAlarmSound();
 
+            // Send webhook for ALARM event
+            const webhookResult = await sendWebhookWithRetry('ALARM', entry);
+            if (webhookResult.success) {
+                logger.info('ALARM webhook sent successfully');
+            } else {
+                logger.warn(`ALARM webhook failed: ${webhookResult.reason || webhookResult.error}`);
+            }
+
             // Trigger visual flash indicator
             const allWindows = BrowserWindow.getAllWindows();
             const mainWindow = allWindows.find(win => win.webContents.getURL().includes('narrator.html'));
@@ -361,6 +624,16 @@ async function captureAndNarrate() {
 
                 // Send to main process for flash indicator window
                 mainWindow.webContents.send('trigger-flash-to-main');
+            }
+        }
+
+        // Send webhook for CHECKIN event (only in checkin mode)
+        if (appConfig.mode === 'checkin') {
+            const webhookResult = await sendWebhookWithRetry('CHECKIN', entry);
+            if (webhookResult.success) {
+                logger.info('CHECKIN webhook sent successfully');
+            } else {
+                logger.warn(`CHECKIN webhook failed: ${webhookResult.reason || webhookResult.error}`);
             }
         }
 
@@ -559,6 +832,41 @@ function getSessionData() {
     };
 }
 
+// Get webhook health status
+function getWebhookHealthStatus() {
+    const webhookSettings = settingsManager.getWebhookSettings();
+
+    if (!webhookSettings.enabled) {
+        return { status: 'disabled', message: 'Webhook notifications are disabled' };
+    }
+
+    if (!webhookSettings.url) {
+        return { status: 'not_configured', message: 'Webhook URL not configured' };
+    }
+
+    if (webhookCircuitBreaker.isOpen) {
+        const timeSinceFailure = Date.now() - webhookCircuitBreaker.lastFailureTime;
+        const timeUntilRetry = Math.max(0, webhookCircuitBreaker.timeout - timeSinceFailure);
+
+        return {
+            status: 'circuit_open',
+            message: `Webhook temporarily disabled due to failures (${webhookCircuitBreaker.failures} consecutive failures)`,
+            retryIn: Math.ceil(timeUntilRetry / 1000),
+            failures: webhookCircuitBreaker.failures
+        };
+    }
+
+    if (webhookCircuitBreaker.failures > 0) {
+        return {
+            status: 'degraded',
+            message: `Webhook experiencing issues (${webhookCircuitBreaker.failures} recent failures)`,
+            failures: webhookCircuitBreaker.failures
+        };
+    }
+
+    return { status: 'healthy', message: 'Webhook is configured and healthy' };
+}
+
 export {
     startNarrator,
     stopNarrator,
@@ -570,5 +878,8 @@ export {
     setAppConfig,
     setScreenRegion,
     setCaptureFrequency,
-    getCaptureFrequency
+    getCaptureFrequency,
+    sendWebhook,
+    sendWebhookWithRetry,
+    getWebhookHealthStatus
 }; 
