@@ -9,6 +9,7 @@ import say from 'say';
 import archiver from 'archiver';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
+import { app } from 'electron';
 import apiKeyManager from './api-key-manager.js';
 import settingsManager from './settings-manager.js';
 import { BrowserWindow } from 'electron';
@@ -22,7 +23,8 @@ let INTERVAL_MS = savedFrequency.intervalMs;
 const SESSION_ID = uuidv4();
 const SESSION_DIR = path.join(process.cwd(), 'sessions', SESSION_ID);
 const SCREENSHOTS_DIR = path.join(SESSION_DIR, 'screenshots');
-const SOUND_PATH = path.join(process.cwd(), 'sound.wav');
+// Use app.getAppPath() for built environment, fallback to process.cwd() for development
+const SOUND_PATH = path.join(app ? app.getAppPath() : process.cwd(), 'sound.wav');
 
 // Get API key from manager or environment
 function getApiKey() {

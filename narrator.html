@@ -391,6 +391,7 @@
         z-index: 1000;
         min-width: 150px;
         display: none;
+        margin-top: 5px;
       }
 
       .export-options.show {
@@ -398,9 +399,11 @@
       }
 
       .export-option {
-        padding: 10px 15px;
+        padding: 10px;
         cursor: pointer;
         transition: background-color 0.2s ease;
+        white-space: nowrap;
+        color: #333;
       }
 
       .export-option:hover {
@@ -692,6 +695,13 @@
             >
               🚀 Configure New Session
             </button>
+            <button
+              class="btn btn-danger btn-large"
+              onclick="endCurrentSession()"
+              style="margin-left: 10px"
+            >
+              🛑 End Session
+            </button>
             <p class="new-session-desc">
               Set up a new monitoring session with custom settings
             </p>
@@ -939,18 +949,33 @@
         // Update captures list
         const capturesList = document.getElementById("capturesList");
         if (data.conversationHistory && data.conversationHistory.length > 0) {
-          capturesList.innerHTML = data.conversationHistory
-            .map(
-              (capture) => `
+          let filteredCaptures = data.conversationHistory;
+
+          if (data.mode === "notification") {
+            // In notification mode, only show alarms and detections
+            filteredCaptures = data.conversationHistory.filter(
+              (capture) =>
+                capture.isAlarm ||
+                !capture.description
+                  .toLowerCase()
+                  .includes("target not detected")
+            );
+          }
+          // In check-in mode, show all captures
+
+          if (filteredCaptures.length > 0) {
+            capturesList.innerHTML = filteredCaptures
+              .map(
+                (capture) => `
             <div class="capture-item">
               <img src="file://${capture.path}" alt="Capture ${
-                capture.captureNumber
-              }" class="capture-image">
+                  capture.captureNumber
+                }" class="capture-image">
               <div class="capture-details">
                 <div class="capture-meta">
                   Capture ${capture.captureNumber} - ${new Date(
-                capture.timestamp
-              ).toLocaleString()}
+                  capture.timestamp
+                ).toLocaleString()}
                   ${
                     capture.isAlarm
                       ? '<span class="alarm-indicator">ALARM</span>'
@@ -961,8 +986,20 @@
               </div>
             </div>
           `
-            )
-            .join("");
+              )
+              .join("");
+          } else {
+            capturesList.innerHTML = `
+              <div class="empty-state">
+                <h3>No detections yet</h3>
+                <p>${
+                  data.mode === "notification"
+                    ? "Waiting for target to be detected..."
+                    : "Start a session to see captures here"
+                }</p>
+              </div>
+            `;
+          }
         } else {
           capturesList.innerHTML = `
             <div class="empty-state">
@@ -1313,6 +1350,11 @@
       // Listen for file manager show request
       ipcRenderer.on("show-file-manager", () => {
         switchTab("filemanager");
+      });
+
+      // Listen for session ended event
+      ipcRenderer.on("session-ended", () => {
+        loadDashboard(); // Refresh dashboard to show no active session
       });
 
       // Close export dropdowns when clicking outside
@@ -1679,6 +1721,33 @@
           }
         } catch (error) {
           alert(`Error opening session configuration: ${error.message}`);
+        }
+      }
+
+      // End current session
+      async function endCurrentSession() {
+        const confirmed = confirm(
+          "Are you sure you want to end the current monitoring session?\n\n" +
+            "This will:\n" +
+            "• Stop all capture processes\n" +
+            "• Close the current session\n" +
+            "• You can start a new session later\n\n" +
+            "Continue?"
+        );
+
+        if (!confirmed) return;
+
+        try {
+          const result = await ipcRenderer.invoke("end-current-session");
+
+          if (result.success) {
+            alert("Current session ended successfully!");
+            loadDashboard(); // Refresh dashboard to show no active session
+          } else {
+            alert(`Failed to end current session: ${result.error}`);
+          }
+        } catch (error) {
+          alert(`Error ending current session: ${error.message}`);
         }
       }
     </script>

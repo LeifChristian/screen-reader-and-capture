@@ -349,6 +349,12 @@ function createTray() {
         type: 'separator'
       },
       {
+        label: '🛑 End Current Session',
+        click: () => {
+          endCurrentSession();
+        }
+      },
+      {
         label: 'Export Current Session...',
         click: () => {
           showExportDialog();
@@ -740,6 +746,39 @@ ipcMain.on('cancel-setup', () => {
   // Don't quit the app, just close the modal
 });
 
+// End current session
+function endCurrentSession() {
+  try {
+    // Stop the narrator
+    stopNarrator();
+
+    // Reset app config
+    appConfig = null;
+
+    // Update tray menu
+    updateTrayMenu();
+
+    // Notify main window if it exists
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('session-ended');
+    }
+
+    // Show confirmation
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Session Ended',
+        message: 'Current monitoring session has been stopped.',
+        detail: 'You can start a new session from the tray menu or dashboard.'
+      });
+    }
+
+    console.log('Session ended successfully');
+  } catch (error) {
+    console.error('Error ending session:', error);
+  }
+}
+
 // IPC handlers for renderer communication
 ipcMain.handle('get-session-data', () => {
   return getSessionData();
@@ -792,6 +831,11 @@ ipcMain.handle('reset-settings', () => {
 
 ipcMain.handle('start-new-session', () => {
   try {
+    // End current session if one is running
+    if (appConfig) {
+      endCurrentSession();
+    }
+
     // Hide main window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide();
@@ -800,6 +844,15 @@ ipcMain.handle('start-new-session', () => {
     // Create startup modal
     createStartupModal();
 
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('end-current-session', () => {
+  try {
+    endCurrentSession();
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
