@@ -6,6 +6,7 @@ import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionD
 import apiKeyManager from './api-key-manager.js';
 import sessionManager from './session-manager.js';
 import settingsManager from './settings-manager.js';
+import volumeControl from './volume-control.js';
 
 dotenv.config();
 
@@ -277,6 +278,12 @@ function createTray() {
       type: 'separator'
     },
     {
+      label: '🔊 Volume Control',
+      click: () => {
+        volumeControl.showVolumeSlider();
+      }
+    },
+    {
       label: 'Show Dashboard',
       click: () => {
         showMainWindow();
@@ -340,9 +347,21 @@ function createTray() {
   tray.setToolTip(tooltipText);
   tray.setContextMenu(contextMenu);
 
-  // Left click to show dashboard
-  tray.on('click', () => {
-    showMainWindow();
+  // Left click to show volume slider
+  tray.on('click', async () => {
+    const isMuted = await volumeControl.isMutedState();
+    if (isMuted) {
+      // If muted, unmute on left click
+      await volumeControl.toggleMute();
+    } else {
+      // If not muted, show volume slider
+      volumeControl.showVolumeSlider();
+    }
+  });
+
+  // Right click to toggle mute
+  tray.on('right-click', async () => {
+    await volumeControl.toggleMute();
   });
 
   // Double click to show dashboard (backup)
@@ -881,6 +900,23 @@ ipcMain.on('hide-flash-indicator', () => {
   if (flashIndicatorWindow) {
     flashIndicatorWindow.hide();
   }
+});
+
+// Volume control IPC handlers
+ipcMain.handle('get-volume', async () => {
+  return await volumeControl.getVolume();
+});
+
+ipcMain.handle('set-volume', async (event, volume) => {
+  return await volumeControl.setVolume(volume);
+});
+
+ipcMain.handle('toggle-mute', async () => {
+  return await volumeControl.toggleMute();
+});
+
+ipcMain.handle('is-muted', async () => {
+  return await volumeControl.isMutedState();
 });
 
 app.whenReady().then(() => {

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Volume Control</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        user-select: none;
+      }
+
+      .volume-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .volume-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .volume-icon {
+        font-size: 18px;
+      }
+
+      .volume-slider-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+      }
+
+      .volume-slider {
+        flex: 1;
+        height: 6px;
+        background: #333;
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+        -webkit-appearance: none;
+      }
+
+      .volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        background: #2196f3;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+
+      .volume-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: #2196f3;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+      }
+
+      .volume-value {
+        font-size: 12px;
+        min-width: 30px;
+        text-align: center;
+        color: #ccc;
+      }
+
+      .volume-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 5px;
+      }
+
+      .volume-btn {
+        background: #333;
+        border: none;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+      }
+
+      .volume-btn:hover {
+        background: #555;
+      }
+
+      .volume-btn.muted {
+        background: #f44336;
+      }
+
+      .muted-indicator {
+        color: #f44336;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="volume-container">
+      <div class="volume-header">
+        <span class="volume-icon" id="volumeIcon">🔊</span>
+        <span id="volumeStatus">Volume</span>
+      </div>
+
+      <div class="volume-slider-container">
+        <input
+          type="range"
+          class="volume-slider"
+          id="volumeSlider"
+          min="0"
+          max="100"
+          value="50"
+        />
+        <span class="volume-value" id="volumeValue">50%</span>
+      </div>
+
+      <div class="volume-buttons">
+        <button class="volume-btn" id="muteBtn" onclick="toggleMute()">
+          Mute
+        </button>
+        <button class="volume-btn" onclick="setVolume(0)">0%</button>
+        <button class="volume-btn" onclick="setVolume(50)">50%</button>
+        <button class="volume-btn" onclick="setVolume(100)">100%</button>
+      </div>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      let currentVolume = 50;
+      let isMuted = false;
+
+      // Initialize volume slider
+      async function initializeVolume() {
+        try {
+          const volume = await ipcRenderer.invoke("get-volume");
+          const muted = await ipcRenderer.invoke("is-muted");
+
+          currentVolume = volume;
+          isMuted = muted;
+
+          updateUI();
+        } catch (error) {
+          console.error("Error initializing volume:", error);
+        }
+      }
+
+      // Update UI elements
+      function updateUI() {
+        const slider = document.getElementById("volumeSlider");
+        const volumeValue = document.getElementById("volumeValue");
+        const volumeIcon = document.getElementById("volumeIcon");
+        const volumeStatus = document.getElementById("volumeStatus");
+        const muteBtn = document.getElementById("muteBtn");
+
+        if (isMuted) {
+          volumeIcon.textContent = "🔇";
+          volumeStatus.innerHTML = '<span class="muted-indicator">MUTED</span>';
+          muteBtn.textContent = "Unmute";
+          muteBtn.classList.add("muted");
+          slider.value = 0;
+          volumeValue.textContent = "MUTED";
+        } else {
+          if (currentVolume === 0) {
+            volumeIcon.textContent = "🔈";
+          } else if (currentVolume < 50) {
+            volumeIcon.textContent = "🔉";
+          } else {
+            volumeIcon.textContent = "🔊";
+          }
+
+          volumeStatus.textContent = "Volume";
+          muteBtn.textContent = "Mute";
+          muteBtn.classList.remove("muted");
+          slider.value = currentVolume;
+          volumeValue.textContent = currentVolume + "%";
+        }
+      }
+
+      // Set volume
+      async function setVolume(volume) {
+        try {
+          await ipcRenderer.invoke("set-volume", volume);
+          currentVolume = volume;
+          if (isMuted && volume > 0) {
+            isMuted = false;
+          }
+          updateUI();
+        } catch (error) {
+          console.error("Error setting volume:", error);
+        }
+      }
+
+      // Toggle mute
+      async function toggleMute() {
+        try {
+          isMuted = await ipcRenderer.invoke("toggle-mute");
+          updateUI();
+        } catch (error) {
+          console.error("Error toggling mute:", error);
+        }
+      }
+
+      // Handle slider input
+      document.getElementById("volumeSlider").addEventListener("input", (e) => {
+        const volume = parseInt(e.target.value);
+        setVolume(volume);
+      });
+
+      // Initialize when loaded
+      window.addEventListener("load", () => {
+        initializeVolume();
+      });
+
+      // Handle keyboard shortcuts
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          window.close();
+        } else if (e.key === "ArrowUp") {
+          setVolume(Math.min(100, currentVolume + 5));
+        } else if (e.key === "ArrowDown") {
+          setVolume(Math.max(0, currentVolume - 5));
+        } else if (e.key === " ") {
+          e.preventDefault();
+          toggleMute();
+        }
+      });
+    </script>
+  </body>
+</html>
