@@ -218,20 +218,18 @@ async function getScreenDescription(imagePath) {
             }
         } else {
             // Notification mode: search for specific content
-            contextPrompt = `You are monitoring a screenshot for specific content. The user is looking for: "${appConfig.searchPrompt}".
+            contextPrompt = `You are monitoring a screenshot for: "${appConfig.searchPrompt}"
 
-Analyze the screenshot carefully and determine if what the user is looking for is present or visible.
+IMPORTANT: Look for ANY form of this content - text, images, names, references, or related content.
 
-If you find what they're looking for:
-- Start your response with [ALARM] (this exact text)
-- Then provide a clear description of what you found and why it matches their search
-- Be specific about where you see it and what makes it match their criteria
+If you find ANYTHING related to "${appConfig.searchPrompt}":
+- Start with [ALARM]
+- Briefly describe what you found and where
 
-If you don't find what they're looking for:
-- Simply provide a brief description of what you see instead
-- Do NOT include [ALARM] in your response
+If you don't find anything related:
+- Simply respond: "Target not detected"
 
-Remember: Only include [ALARM] if you're confident you found what they're specifically looking for.`;
+Be sensitive to partial matches, text mentions, and visual references. Don't be overly restrictive.`;
         }
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
