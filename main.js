@@ -1,9 +1,10 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, screen } from 'electron';
 import path from 'path';
 import dotenv from 'dotenv';
-import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion } from './screen-narrator.js';
+import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion, setCaptureFrequency, getCaptureFrequency } from './screen-narrator.js';
 import apiKeyManager from './api-key-manager.js';
 import sessionManager from './session-manager.js';
+import settingsManager from './settings-manager.js';
 
 dotenv.config();
 
@@ -15,6 +16,7 @@ let startupWindow = null;
 let apiKeyWindow = null;
 let regionSelectorWindow = null;
 let regionOverlayWindow = null;
+let flashIndicatorWindow = null;
 let appConfig = null;
 let currentRegion = null;
 let isAppReady = false;
@@ -65,9 +67,11 @@ function createApiKeyWindow() {
 }
 
 function createMainWindow() {
+  const savedBounds = settingsManager.getWindowBounds();
+
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
+    width: savedBounds.width,
+    height: savedBounds.height,
     show: false, // Don't show window initially
     webPreferences: {
       preload: path.join(process.cwd(), 'preload.js'),
@@ -80,6 +84,12 @@ function createMainWindow() {
   global.mainWindow = mainWindow;
 
   mainWindow.loadFile('narrator.html');
+
+  // Save window bounds when resized or moved
+  mainWindow.on('resize', () => {
+    const bounds = mainWindow.getBounds();
+    settingsManager.setWindowBounds({ width: bounds.width, height: bounds.height });
+  });
 
   // Hide window when closed instead of quitting app
   mainWindow.on('close', (event) => {
@@ -341,6 +351,9 @@ function updateTrayMenu() {
 function handleStartupConfig(config) {
   appConfig = config;
 
+  // Save last used mode
+  settingsManager.setLastUsedMode(config.mode);
+
   // Set the narrator configuration
   setAppConfig(config);
 
@@ -360,6 +373,9 @@ function handleStartupConfig(config) {
 // Handle startup with region selection
 function handleStartupWithRegionSelection(config) {
   appConfig = config;
+
+  // Save last used mode
+  settingsManager.setLastUsedMode(config.mode);
 
   // Set the narrator configuration
   setAppConfig(config);
@@ -459,6 +475,10 @@ async function showQuitDialog() {
 // Handle region selection
 ipcMain.on('region-selected', (event, region) => {
   currentRegion = region; // Update currentRegion
+
+  // Save last used region
+  settingsManager.setLastUsedRegion(region);
+
   setScreenRegion(region);
   updateTrayMenu();
 
@@ -641,6 +661,23 @@ ipcMain.handle('get-session-data', () => {
   return getSessionData();
 });
 
+ipcMain.handle('set-capture-frequency', (event, value, unit) => {
+  try {
+    const success = setCaptureFrequency(value, unit);
+    return { success, frequency: getCaptureFrequency() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-capture-frequency', () => {
+  try {
+    return { success: true, frequency: getCaptureFrequency() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('export-session', async (event, includeScreenshots) => {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -651,7 +688,79 @@ ipcMain.handle('export-session', async (event, includeScreenshots) => {
   }
 });
 
+// IPC handlers for settings management
+ipcMain.handle('get-user-settings', () => {
+  try {
+    return { success: true, settings: settingsManager.getAllSettings() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('reset-settings', () => {
+  try {
+    const settings = settingsManager.resetToDefaults();
+    return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+function createFlashIndicator() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+
+  flashIndicatorWindow = new BrowserWindow({
+    width: width,
+    height: height,
+    x: primaryDisplay.bounds.x,
+    y: primaryDisplay.bounds.y,
+    show: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    focusable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  flashIndicatorWindow.loadFile('flash-indicator.html');
+  flashIndicatorWindow.setIgnoreMouseEvents(true);
+  flashIndicatorWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  flashIndicatorWindow.on('closed', () => {
+    flashIndicatorWindow = null;
+  });
+}
+
+// Handle flash indicator trigger
+ipcMain.on('trigger-flash-indicator', () => {
+  if (!flashIndicatorWindow) {
+    createFlashIndicator();
+  }
+
+  flashIndicatorWindow.show();
+  flashIndicatorWindow.webContents.send('start-flash');
+});
+
+// Handle flash indicator hide
+ipcMain.on('hide-flash-indicator', () => {
+  if (flashIndicatorWindow) {
+    flashIndicatorWindow.hide();
+  }
+});
+
 app.whenReady().then(() => {
+  // Load last used region if available
+  const lastRegion = settingsManager.getLastUsedRegion();
+  if (lastRegion) {
+    currentRegion = lastRegion;
+  }
+
   // Check API key first
   checkApiKeyAndContinue();
 });
@@ -678,6 +787,11 @@ app.on('before-quit', (event) => {
   // Close overlay window
   if (regionOverlayWindow) {
     regionOverlayWindow.close();
+  }
+
+  // Close flash indicator window
+  if (flashIndicatorWindow) {
+    flashIndicatorWindow.close();
   }
 
   stopNarrator();

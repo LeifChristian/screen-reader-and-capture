@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Flash Indicator</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 100vw;
+        height: 100vh;
+        background: transparent;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .flash-border {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border: 5px solid dodgerblue;
+        pointer-events: none;
+        opacity: 0;
+        animation: flash 0.5s ease-in-out infinite;
+      }
+
+      @keyframes flash {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      .flash-border.active {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flash-border" id="flashBorder"></div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      let flashTimeout = null;
+
+      // Listen for flash trigger
+      ipcRenderer.on("start-flash", () => {
+        const flashBorder = document.getElementById("flashBorder");
+
+        // Clear any existing timeout
+        if (flashTimeout) {
+          clearTimeout(flashTimeout);
+        }
+
+        // Start flashing
+        flashBorder.classList.add("active");
+
+        // Stop flashing after 5 seconds
+        flashTimeout = setTimeout(() => {
+          flashBorder.classList.remove("active");
+
+          // Hide the window after animation completes
+          setTimeout(() => {
+            ipcRenderer.send("hide-flash-indicator");
+          }, 100);
+        }, 5000);
+      });
+
+      // Hide window when requested
+      ipcRenderer.on("hide-flash", () => {
+        const flashBorder = document.getElementById("flashBorder");
+        flashBorder.classList.remove("active");
+      });
+    </script>
+  </body>
+</html>

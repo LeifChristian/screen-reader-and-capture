@@ -10,11 +10,15 @@ import archiver from 'archiver';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
 import apiKeyManager from './api-key-manager.js';
+import settingsManager from './settings-manager.js';
+import { BrowserWindow } from 'electron';
 
 dotenv.config();
 
 const IS_DEV = process.env.IS_DEV === 'true';
-const INTERVAL_MS = 60 * 1000; // 60 seconds between captures
+// Load frequency from settings manager, default to 5 minutes
+const savedFrequency = settingsManager.getCaptureFrequency();
+let INTERVAL_MS = savedFrequency.intervalMs;
 const SESSION_ID = uuidv4();
 const SESSION_DIR = path.join(process.cwd(), 'sessions', SESSION_ID);
 const SCREENSHOTS_DIR = path.join(SESSION_DIR, 'screenshots');
@@ -307,13 +311,24 @@ async function captureAndNarrate() {
         // Check if this is an alarm trigger
         const isAlarmTriggered = description.includes('[ALARM]');
 
+        // In notification mode, only keep screenshots if alarm is triggered
+        if (appConfig.mode === 'notification' && !isAlarmTriggered) {
+            // Delete the screenshot since no alarm was triggered
+            try {
+                fs.unlinkSync(screenshot.path);
+                logger.info(`Screenshot deleted (no alarm triggered): ${screenshot.filename}`);
+            } catch (deleteError) {
+                logger.error(`Failed to delete screenshot: ${deleteError.message}`);
+            }
+        }
+
         // Create entry
         const entry = {
             captureNumber: screenshot.captureNumber,
             timestamp: new Date().toISOString(),
             filename: screenshot.filename,
             description: description,
-            path: screenshot.path,
+            path: isAlarmTriggered || appConfig.mode === 'checkin' ? screenshot.path : null,
             isAlarm: isAlarmTriggered,
             mode: appConfig.mode
         };
@@ -332,7 +347,21 @@ async function captureAndNarrate() {
         // Handle alarm if triggered
         if (isAlarmTriggered) {
             logger.warn(`🚨 ALARM TRIGGERED! Found: ${cleanDescription}`);
+
+            // Play alarm sound
             await playAlarmSound();
+
+            // Trigger visual flash indicator
+            const allWindows = BrowserWindow.getAllWindows();
+            const mainWindow = allWindows.find(win => win.webContents.getURL().includes('narrator.html'));
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                // Send to main window for dashboard update
+                mainWindow.webContents.send('trigger-flash-indicator');
+
+                // Send to main process for flash indicator window
+                mainWindow.webContents.send('trigger-flash-to-main');
+            }
         }
 
         // Speak the description (only in check-in mode or when alarm is triggered)
@@ -450,6 +479,72 @@ function cleanupSession() {
     }
 }
 
+// Set capture frequency
+function setCaptureFrequency(value, unit) {
+    let newIntervalMs;
+
+    switch (unit) {
+        case 'seconds':
+            newIntervalMs = value * 1000;
+            break;
+        case 'minutes':
+            newIntervalMs = value * 60 * 1000;
+            break;
+        case 'hours':
+            newIntervalMs = value * 60 * 60 * 1000;
+            break;
+        case 'days':
+            newIntervalMs = value * 24 * 60 * 60 * 1000;
+            break;
+        default:
+            logger.error(`Invalid frequency unit: ${unit}`);
+            return false;
+    }
+
+    // Minimum interval of 10 seconds
+    if (newIntervalMs < 10000) {
+        logger.warn('Minimum capture interval is 10 seconds');
+        newIntervalMs = 10000;
+    }
+
+    // Maximum interval of 7 days
+    if (newIntervalMs > 7 * 24 * 60 * 60 * 1000) {
+        logger.warn('Maximum capture interval is 7 days');
+        newIntervalMs = 7 * 24 * 60 * 60 * 1000;
+    }
+
+    const oldInterval = INTERVAL_MS;
+    INTERVAL_MS = newIntervalMs;
+
+    // Save to settings manager
+    settingsManager.setCaptureFrequency(value, unit);
+
+    logger.info(`Capture frequency changed from ${oldInterval / 1000}s to ${INTERVAL_MS / 1000}s`);
+
+    // If narrator is running, restart with new interval
+    if (narratorInterval) {
+        clearInterval(narratorInterval);
+        narratorInterval = setInterval(captureAndNarrate, INTERVAL_MS);
+        logger.info('Narrator restarted with new frequency');
+    }
+
+    return true;
+}
+
+// Get current capture frequency
+function getCaptureFrequency() {
+    const savedSettings = settingsManager.getCaptureFrequency();
+    return {
+        intervalMs: INTERVAL_MS,
+        intervalSeconds: INTERVAL_MS / 1000,
+        intervalMinutes: INTERVAL_MS / (60 * 1000),
+        intervalHours: INTERVAL_MS / (60 * 60 * 1000),
+        intervalDays: INTERVAL_MS / (24 * 60 * 60 * 1000),
+        value: savedSettings.value,
+        unit: savedSettings.unit
+    };
+}
+
 // Get current session data for UI
 function getSessionData() {
     return {
@@ -459,7 +554,8 @@ function getSessionData() {
         isNarrating: isNarrating,
         sessionDir: SESSION_DIR,
         mode: appConfig.mode,
-        searchPrompt: appConfig.searchPrompt
+        searchPrompt: appConfig.searchPrompt,
+        frequency: getCaptureFrequency()
     };
 }
 
@@ -472,5 +568,7 @@ export {
     getSessionData,
     speakText,
     setAppConfig,
-    setScreenRegion
+    setScreenRegion,
+    setCaptureFrequency,
+    getCaptureFrequency
 }; 

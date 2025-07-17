@@ -424,6 +424,32 @@
       let selectedMode = null;
       let selectedRegion = "fullscreen"; // Default to full screen
 
+      // Load last used settings
+      async function loadLastUsedSettings() {
+        try {
+          const result = await ipcRenderer.invoke("get-user-settings");
+          if (result.success) {
+            const lastMode = result.settings.lastUsedMode || "checkin";
+            const lastRegion = result.settings.lastUsedRegion;
+
+            // Set last used mode as default
+            selectMode(lastMode);
+
+            // Set region based on last used
+            if (lastRegion) {
+              selectRegion("target");
+            } else {
+              selectRegion("fullscreen");
+            }
+          }
+        } catch (error) {
+          console.error("Error loading last used settings:", error);
+          // Fall back to defaults
+          selectMode("checkin");
+          selectRegion("fullscreen");
+        }
+      }
+
       function selectMode(mode) {
         selectedMode = mode;
 
@@ -524,10 +550,9 @@
         .getElementById("searchPrompt")
         .addEventListener("input", updateStartButton);
 
-      // Auto-focus and select checkin mode by default
+      // Auto-focus and load last used settings
       document.addEventListener("DOMContentLoaded", () => {
-        selectMode("checkin");
-        selectRegion("fullscreen"); // Ensure full screen is selected by default
+        loadLastUsedSettings();
       });
 
       // Handle escape key
