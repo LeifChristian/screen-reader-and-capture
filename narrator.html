@@ -247,14 +247,15 @@
 
       .session-item {
         display: flex;
-        align-items: center;
-        padding: 15px 20px;
+        align-items: flex-start; /* top align */
+        padding: 10px 20px; /* slimmer but add vertical rhythm */
         border-bottom: 1px solid #e9ecef;
         transition: background-color 0.2s ease;
+        row-gap: 5px;
       }
 
       .session-item:hover {
-        background: #f8f9fa;
+        background: #f5f5f5;
       }
 
       .session-item:last-child {
@@ -264,14 +265,15 @@
       .session-info {
         flex: 1;
         display: grid;
-        grid-template-columns: 1fr 100px 100px 80px 160px;
-        gap: 15px;
-        align-items: center;
+        grid-template-columns: 1fr 90px 110px 90px auto; /* auto for buttons */
+        gap: 12px;
+        align-items: flex-start; /* top align all cells */
+        word-break: break-word;
       }
 
       .session-name {
-        font-weight: 500;
-        color: #333;
+        word-wrap: break-word;
+        white-space: normal;
       }
 
       .session-mode {
@@ -309,17 +311,17 @@
 
       .session-actions {
         display: flex;
-        gap: 10px;
+        flex-direction: column; /* stack vertically */
+        gap: 5px;
+        align-items: flex-start;
       }
 
       .btn {
-        padding: 8px 16px;
-        border: none;
+        padding: 6px 14px;
         border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9em;
         font-weight: 500;
-        transition: all 0.2s ease;
+        font-size: 0.85em;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
       }
 
       .btn-primary {
@@ -1227,8 +1229,10 @@
             (session) => `
           <div class="session-item">
             <div class="session-info">
-              <div class="session-name">
-                ${session.id.substring(0, 8)}...
+              <div class="session-name link" onclick="openSession('${
+                session.id
+              }')" ondblclick="renameSessionPrompt(event, '${session.id}')">
+                ${session.id}
                 <br>
                 <small>${session.screenshotCount} screenshots</small>
               </div>
@@ -1268,6 +1272,93 @@
         `
           )
           .join("");
+      }
+
+      // Open a session to list its files
+      async function openSession(sessionId) {
+        const container = document.getElementById("sessionsList");
+
+        // Fetch files
+        const result = await ipcRenderer.invoke(
+          "list-session-files",
+          sessionId
+        );
+        if (!result.success) {
+          alert(result.error);
+          return;
+        }
+
+        const files = result.files.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        // Build HTML panel mirroring root list style
+        const panelHtml = `
+          <div class="session-item" style="background:#f8f9fa; border-bottom:none; align-items:center;">
+            <div class="session-info">
+              <div class="session-name">${sessionId}</div>
+              <div class="session-mode">Files</div>
+              <div class="session-date"></div>
+              <div class="session-size"></div>
+              <div class="session-actions">
+                 <div class="export-dropdown">
+                   <button class="btn btn-primary" onclick="toggleExportOptions('${sessionId}')">Export ▼</button>
+                   <div class="export-options" id="export-${sessionId}">
+                     <div class="export-option" onclick="exportSession('${sessionId}', false)">📄 Text Only</div>
+                     <div class="export-option" onclick="exportSession('${sessionId}', true)">📦 Text + Screenshots</div>
+                   </div>
+                 </div>
+                 <button class="btn btn-danger" onclick="deleteSession('${sessionId}')">Delete</button>
+                 <button class="btn" onclick="refreshSessions()">◀ Back</button>
+              </div>
+            </div>
+          </div>
+          ${files
+            .map(
+              (f) => `
+            <div class="session-item">
+              <div class="session-info" style="grid-template-columns:1fr 110px 160px auto;">
+                 <div class="session-name">${f.name}</div>
+                 <div class="session-size">${formatSize(f.size)}</div>
+                 <div class="session-date">${new Date(
+                   f.createdAt
+                 ).toLocaleString()}</div>
+                 <div class="session-actions">
+                     <button class="btn btn-primary" onclick="saveSessionFile('${sessionId}','${f.relativePath.replace(
+                /\\/g,
+                "\\\\"
+              )}')">Save as…</button>
+                 </div>
+              </div>
+            </div>`
+            )
+            .join("")}`;
+
+        container.innerHTML = panelHtml;
+      }
+
+      async function saveSessionFile(sessionId, relPath) {
+        const result = await ipcRenderer.invoke(
+          "save-session-file",
+          sessionId,
+          relPath
+        );
+        if (!result.success && !result.cancelled) {
+          alert(result.error);
+        }
+      }
+
+      async function renameSessionPrompt(ev, sessionId) {
+        ev.stopPropagation();
+        const newName = prompt("Rename session folder:", sessionId);
+        if (!newName || newName === sessionId) return;
+        const res = await ipcRenderer.invoke(
+          "rename-session",
+          sessionId,
+          newName
+        );
+        if (!res.success) alert(res.error);
+        refreshSessions();
       }
 
       // Toggle export options

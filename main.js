@@ -7,6 +7,7 @@ import apiKeyManager from './api-key-manager.js';
 import sessionManager from './session-manager.js';
 import settingsManager from './settings-manager.js';
 import volumeControl from './volume-control.js';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -744,6 +745,51 @@ ipcMain.handle('delete-session', async (event, sessionId) => {
   try {
     const result = sessionManager.deleteSession(sessionId);
     return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Rename session folder
+ipcMain.handle('rename-session', async (event, sessionId, newName) => {
+  try {
+    const result = sessionManager.renameSession(sessionId, newName);
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// List files inside a session
+ipcMain.handle('list-session-files', async (event, sessionId) => {
+  try {
+    return sessionManager.listFilesInSession(sessionId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Save a single file from a session with a file picker
+ipcMain.handle('save-session-file', async (event, sessionId, relativePath) => {
+  try {
+    const sessionPath = path.join(process.cwd(), 'sessions', sessionId);
+    const absPath = path.join(sessionPath, relativePath);
+
+    if (!fs.existsSync(absPath)) {
+      return { success: false, error: 'File not found' };
+    }
+
+    const saveResult = await dialog.showSaveDialog(mainWindow ?? BrowserWindow.getFocusedWindow(), {
+      defaultPath: path.basename(relativePath),
+      title: 'Save Session File'
+    });
+
+    if (saveResult.canceled) {
+      return { success: false, cancelled: true };
+    }
+
+    fs.copyFileSync(absPath, saveResult.filePath);
+    return { success: true, savedTo: saveResult.filePath };
   } catch (error) {
     return { success: false, error: error.message };
   }

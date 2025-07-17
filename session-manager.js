@@ -133,6 +133,70 @@ class SessionManager {
         }
     }
 
+    // Rename session folder
+    renameSession(sessionId, newName) {
+        try {
+            if (!newName || /[\\/:*?"<>|]/.test(newName)) {
+                return { success: false, error: 'Invalid session name' };
+            }
+
+            const oldPath = path.join(this.sessionsDir, sessionId);
+            const newPath = path.join(this.sessionsDir, newName);
+
+            if (!fs.existsSync(oldPath)) {
+                return { success: false, error: 'Session not found' };
+            }
+
+            if (fs.existsSync(newPath)) {
+                return { success: false, error: 'A session with that name already exists' };
+            }
+
+            fs.renameSync(oldPath, newPath);
+            return { success: true };
+        } catch (error) {
+            console.error(`Error renaming session ${sessionId}:`, error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // List files (relative paths) inside a session folder (screenshots and descriptions)
+    listFilesInSession(sessionId) {
+        try {
+            const sessionPath = path.join(this.sessionsDir, sessionId);
+
+            if (!fs.existsSync(sessionPath)) {
+                return { success: false, error: 'Session not found' };
+            }
+
+            const walk = (dir, base = '') => {
+                let files = [];
+                const items = fs.readdirSync(dir);
+                for (const item of items) {
+                    const absPath = path.join(dir, item);
+                    const relPath = path.join(base, item);
+                    const stats = fs.statSync(absPath);
+                    if (stats.isDirectory()) {
+                        files = files.concat(walk(absPath, relPath));
+                    } else {
+                        files.push({
+                            name: item,
+                            relativePath: relPath,
+                            size: stats.size,
+                            createdAt: stats.birthtime,
+                            modifiedAt: stats.mtime
+                        });
+                    }
+                }
+                return files;
+            };
+
+            return { success: true, files: walk(sessionPath) };
+        } catch (error) {
+            console.error(`Error listing files for session ${sessionId}:`, error);
+            return { success: false, error: error.message };
+        }
+    }
+
     // Export session
     async exportSession(sessionId, exportPath, includeScreenshots = true) {
         try {
