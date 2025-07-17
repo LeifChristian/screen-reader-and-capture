@@ -613,21 +613,21 @@ async function showQuitDialog() {
 ipcMain.on('region-selected', (event, region) => {
   const displays = screen.getAllDisplays();
 
-  // Convert physical coordinates back to DIP for comparison against bounds
-  const findContainingDisplay = () => {
+  // Compare against display bounds in PHYSICAL pixels for reliable matching
+  const containingDisplay = (() => {
     for (const d of displays) {
-      const dipX = region.x / d.scaleFactor;
-      const dipY = region.y / d.scaleFactor;
+      const physLeft = d.bounds.x * d.scaleFactor;
+      const physTop = d.bounds.y * d.scaleFactor;
+      const physRight = physLeft + d.bounds.width * d.scaleFactor;
+      const physBottom = physTop + d.bounds.height * d.scaleFactor;
 
-      if (dipX >= d.bounds.x && dipX < d.bounds.x + d.bounds.width &&
-        dipY >= d.bounds.y && dipY < d.bounds.y + d.bounds.height) {
+      if (region.x >= physLeft && region.x < physRight &&
+        region.y >= physTop && region.y < physBottom) {
         return d;
       }
     }
     return null;
-  };
-
-  const containingDisplay = findContainingDisplay();
+  })();
 
   if (containingDisplay) {
     region.displayIndex = displays.indexOf(containingDisplay);

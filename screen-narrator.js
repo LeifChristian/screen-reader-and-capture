@@ -171,8 +171,13 @@ async function takeScreenshot() {
             const targetIndex = appConfig.region.displayIndex ?? 0;
             const targetDisplay = displays[targetIndex] || displays[0];
 
+            // Map Electron's display index to screenshot-desktop's display id
+            const ssDisplays = await screenshot.listDisplays();
+            const targetScreenId = ssDisplays[targetIndex]?.id ?? ssDisplays[0]?.id;
+
             // Capture only the target display to minimise memory
-            const fullScreenImg = await screenshot({ format: 'png', screen: targetIndex });
+            const fullScreenImg = await screenshot({ format: 'png', screen: targetScreenId });
+            logger.info(`Using screenshot-desktop display id: ${targetScreenId}`);
 
             // Translate display bounds (which are DIP) to physical pixels using the display scale factor
             const physBoundsX = Math.round(targetDisplay.bounds.x * targetDisplay.scaleFactor);
@@ -204,7 +209,10 @@ async function takeScreenshot() {
         } else {
             // Take full screen screenshot
             // Capture primary display if multiple
-            img = await screenshot({ format: 'png', screen: 0 });
+            const ssDisplaysPrimary = await screenshot.listDisplays();
+            const primaryId = ssDisplaysPrimary[0]?.id;
+            img = await screenshot({ format: 'png', screen: primaryId });
+            logger.info(`Primary display id for screenshot: ${primaryId}`);
             logger.info('Primary display screenshot captured');
         }
 
