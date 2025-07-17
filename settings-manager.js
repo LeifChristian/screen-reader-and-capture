@@ -5,7 +5,8 @@ import path from 'path';
 class SettingsManager {
     constructor() {
         this.settingsFile = path.join(app.getPath('userData'), 'user-settings.json');
-        this.defaultSettings = {
+        // Default settings
+        const DEFAULT_SETTINGS = {
             captureFrequency: {
                 value: 5,
                 unit: 'minutes',
@@ -14,8 +15,8 @@ class SettingsManager {
             lastUsedMode: 'checkin',
             lastUsedRegion: null,
             windowBounds: {
-                width: 1000,
-                height: 700
+                width: 1200,
+                height: 800
             },
             webhook: {
                 enabled: false,
@@ -24,6 +25,9 @@ class SettingsManager {
                 sendOnCheckin: false,
                 timeout: 5000, // 5 seconds timeout
                 retries: 3
+            },
+            alarmSound: {
+                enabled: true
             }
         };
 
@@ -180,6 +184,25 @@ class SettingsManager {
         this.settings.webhook.url = url;
         this.saveSettings();
         return this.settings.webhook;
+    }
+
+    // Get alarm sound settings
+    getAlarmSoundSettings() {
+        return this.settings.alarmSound;
+    }
+
+    // Set alarm sound settings
+    setAlarmSoundSettings(alarmSoundSettings) {
+        this.settings.alarmSound = { ...this.settings.alarmSound, ...alarmSoundSettings };
+        this.saveSettings();
+        return this.settings.alarmSound;
+    }
+
+    // Enable/disable alarm sound
+    setAlarmSoundEnabled(enabled) {
+        this.settings.alarmSound.enabled = enabled;
+        this.saveSettings();
+        return this.settings.alarmSound;
     }
 }
 

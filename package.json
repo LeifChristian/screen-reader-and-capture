@@ -60,6 +60,9 @@
       "!dist/**/*",
       "!build/**/*"
     ],
+    "extraResources": [
+      "sound.wav"
+    ],
     "win": {
       "target": [
         {

@@ -885,6 +885,23 @@ ipcMain.handle('set-webhook-settings', (event, webhookSettings) => {
   }
 });
 
+ipcMain.handle('get-alarm-sound-settings', () => {
+  try {
+    return { success: true, settings: settingsManager.getAlarmSoundSettings() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('set-alarm-sound-settings', (event, alarmSoundSettings) => {
+  try {
+    const settings = settingsManager.setAlarmSoundSettings(alarmSoundSettings);
+    return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('test-webhook', async (event, webhookUrl) => {
   try {
     const testPayload = {

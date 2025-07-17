@@ -499,6 +499,27 @@
         gap: 10px;
       }
 
+      .alarm-sound-setting {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .alarm-sound-setting label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.9em;
+        color: #555;
+      }
+
+      .alarm-sound-setting input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #2196f3; /* Customize checkbox color */
+      }
+
       /* Webhook Settings Styles */
       .webhook-settings {
         background: #f8f9fa;
@@ -745,12 +766,28 @@
           <div class="settings-section">
             <h3>⚙️ Settings</h3>
             <div class="settings-controls">
-              <button class="btn btn-secondary" onclick="resetSettings()">
-                🔄 Reset to Defaults
-              </button>
-              <small style="color: #666; margin-left: 10px">
-                Resets frequency, mode preferences, and window size to defaults
-              </small>
+              <div class="alarm-sound-setting">
+                <label>
+                  <input
+                    type="checkbox"
+                    id="alarmSoundEnabled"
+                    onchange="toggleAlarmSound()"
+                  />
+                  🔊 Enable Alarm Sound
+                </label>
+                <small style="color: #666; margin-left: 10px">
+                  Play sound when alarms are triggered
+                </small>
+              </div>
+              <div style="margin-top: 15px">
+                <button class="btn btn-secondary" onclick="resetSettings()">
+                  🔄 Reset to Defaults
+                </button>
+                <small style="color: #666; margin-left: 10px">
+                  Resets frequency, mode preferences, and window size to
+                  defaults
+                </small>
+              </div>
             </div>
           </div>
 
@@ -906,6 +943,9 @@
 
           // Load webhook settings
           await loadWebhookSettings();
+
+          // Load alarm sound settings
+          await loadAlarmSoundSettings();
         } catch (error) {
           console.error("Error loading dashboard:", error);
         }
@@ -956,9 +996,13 @@
             filteredCaptures = data.conversationHistory.filter(
               (capture) =>
                 capture.isAlarm ||
-                !capture.description
+                (!capture.description
                   .toLowerCase()
-                  .includes("target not detected")
+                  .includes("target not detected") &&
+                  !capture.description.toLowerCase().includes("i'm sorry") &&
+                  !capture.description.toLowerCase().includes("i am sorry") &&
+                  !capture.description.toLowerCase().includes("cannot help") &&
+                  !capture.description.toLowerCase().includes("can't help"))
             );
           }
           // In check-in mode, show all captures
@@ -1280,7 +1324,7 @@
           const result = await ipcRenderer.invoke("delete-session", sessionId);
 
           if (result.success) {
-            alert("Session deleted successfully!");
+            // No success alert - just refresh the list
             refreshSessions();
           } else {
             alert(`Delete failed: ${result.error}`);
@@ -1748,6 +1792,50 @@
           }
         } catch (error) {
           alert(`Error ending current session: ${error.message}`);
+        }
+      }
+
+      // Load alarm sound settings
+      async function loadAlarmSoundSettings() {
+        try {
+          console.log("🔊 Loading alarm sound settings...");
+          const result = await ipcRenderer.invoke("get-alarm-sound-settings");
+
+          if (result.success) {
+            const settings = result.settings;
+            console.log("🔊 Loaded alarm sound settings:", settings);
+
+            document.getElementById("alarmSoundEnabled").checked =
+              settings.enabled;
+            console.log("🔊 Alarm sound UI updated with loaded settings");
+          } else {
+            console.error(
+              "🔊 Failed to load alarm sound settings:",
+              result.error
+            );
+          }
+        } catch (error) {
+          console.error("Error loading alarm sound settings:", error);
+        }
+      }
+
+      // Toggle alarm sound
+      async function toggleAlarmSound() {
+        const enabled = document.getElementById("alarmSoundEnabled").checked;
+
+        try {
+          const result = await ipcRenderer.invoke("set-alarm-sound-settings", {
+            enabled: enabled,
+          });
+
+          if (result.success) {
+            console.log("🔊 Alarm sound settings updated successfully");
+            // No immediate visual feedback needed, settings are saved
+          } else {
+            alert(`Failed to update alarm sound settings: ${result.error}`);
+          }
+        } catch (error) {
+          alert(`Error updating alarm sound settings: ${error.message}`);
         }
       }
     </script>

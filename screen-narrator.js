@@ -24,7 +24,9 @@ const SESSION_ID = uuidv4();
 const SESSION_DIR = path.join(process.cwd(), 'sessions', SESSION_ID);
 const SCREENSHOTS_DIR = path.join(SESSION_DIR, 'screenshots');
 // Use app.getAppPath() for built environment, fallback to process.cwd() for development
-const SOUND_PATH = path.join(app ? app.getAppPath() : process.cwd(), 'sound.wav');
+const SOUND_PATH = app && app.isPackaged
+    ? path.join(process.resourcesPath, 'sound.wav')
+    : path.join(process.cwd(), 'sound.wav');
 
 // Get API key from manager or environment
 function getApiKey() {
@@ -220,18 +222,20 @@ async function getScreenDescription(imagePath) {
             }
         } else {
             // Notification mode: search for specific content
-            contextPrompt = `You are monitoring a screenshot for: "${appConfig.searchPrompt}"
+            contextPrompt = `You are monitoring a screenshot for: "${appConfig.searchPrompt}
 
 IMPORTANT: Look for ANY form of this content - text, images, names, references, or related content.
 
 If you find ANYTHING related to "${appConfig.searchPrompt}":
 - Start with [ALARM]
 - Briefly describe what you found and where
+- If it's a person, provide context (actor, movie, etc.) if possible
 
 If you don't find anything related:
-- Simply respond: "Target not detected"
+- Simply respond: "Target not detected
 
-Be sensitive to partial matches, text mentions, and visual references. Don't be overly restrictive.`;
+Be sensitive to partial matches, text mentions, and visual references. Don't be overly restrictive.
+NEVER respond with "I'm sorry" or similar phrases - only provide factual observations.`;
         }
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -563,8 +567,25 @@ async function captureAndNarrate() {
             return;
         }
 
+        // Filter out "I'm sorry" responses in notification mode
+        if (appConfig.mode === 'notification' &&
+            (description.toLowerCase().includes("i'm sorry") ||
+                description.toLowerCase().includes("i am sorry") ||
+                description.toLowerCase().includes("cannot help") ||
+                description.toLowerCase().includes("can't help"))) {
+            logger.info('Filtered out "I\'m sorry" response from notification mode');
+            return; // Skip this capture entirely
+        }
+
         // Check if this is an alarm trigger
         const isAlarmTriggered = description.includes('[ALARM]');
+
+        // Log alarm detection for debugging
+        if (isAlarmTriggered) {
+            logger.info(`🚨 ALARM DETECTED in description: ${description.substring(0, 10)}...`);
+        } else {
+            logger.info(`No alarm detected in description: ${description.substring(0, 10)}...`);
+        }
 
         // In notification mode, only keep screenshots if alarm is triggered
         if (appConfig.mode === 'notification' && !isAlarmTriggered) {
@@ -608,15 +629,26 @@ async function captureAndNarrate() {
             const mainWindow = allWindows.find(win => win.webContents.getURL().includes('narrator.html'));
 
             if (mainWindow && !mainWindow.isDestroyed()) {
+                logger.info('Sending flash indicator to main window');
                 // Send to main window for dashboard update
                 mainWindow.webContents.send('trigger-flash-indicator');
 
                 // Send to main process for flash indicator window
                 mainWindow.webContents.send('trigger-flash-to-main');
+            } else {
+                logger.warn('Main window not found for flash indicator');
             }
 
-            // Play alarm sound (concurrent with flash indicator - no await for immediate execution)
-            playAlarmSound();
+            // Check if alarm sound is enabled before playing
+            const alarmSoundSettings = settingsManager.getAlarmSoundSettings();
+            logger.info(`Alarm sound enabled: ${alarmSoundSettings.enabled}`);
+            if (alarmSoundSettings.enabled) {
+                logger.info('Playing alarm sound...');
+                // Play alarm sound (concurrent with flash indicator - no await for immediate execution)
+                playAlarmSound();
+            } else {
+                logger.info('Alarm sound disabled - skipping audio notification');
+            }
 
             // Send webhook for ALARM event
             const webhookResult = await sendWebhookWithRetry('ALARM', entry);
@@ -625,6 +657,8 @@ async function captureAndNarrate() {
             } else {
                 logger.warn(`ALARM webhook failed: ${webhookResult.reason || webhookResult.error}`);
             }
+        } else {
+            logger.info('No alarm triggered - continuing with normal processing');
         }
 
         // Send webhook for CHECKIN event (only in checkin mode)
