@@ -116,6 +116,22 @@ class SessionManager {
         }
     }
 
+    // Override to skip empty sessions
+    getSessionInfo(sessionPath, sessionId) {
+        try {
+            const info = this._getInfo(sessionPath, sessionId);
+            if (!info) return null;
+
+            if (info.screenshotCount === 0 && !info.hasDescriptions) {
+                return null; // skip empty sessions
+            }
+            return info;
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+    }
+
     // Delete session
     deleteSession(sessionId) {
         try {

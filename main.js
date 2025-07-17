@@ -830,13 +830,22 @@ ipcMain.handle('export-session-with-picker', async (event, sessionId, includeScr
 });
 
 // Check API key and continue app initialization
-function checkApiKeyAndContinue() {
+async function checkApiKeyAndContinue() {
   console.log('🔥 checkApiKeyAndContinue() called');
   console.log('🔥 IS_DEV:', IS_DEV);
-  console.log('🔥 hasStoredKey:', apiKeyManager.hasStoredKey());
+  let validKey = false;
 
-  if (IS_DEV || apiKeyManager.hasStoredKey()) {
-    console.log('🔥 API key check passed, setting isAppReady = true');
+  if (IS_DEV) {
+    validKey = true;
+  } else if (apiKeyManager.hasStoredKey()) {
+    const key = apiKeyManager.getStoredKey();
+    console.log('🔥 Testing stored API key');
+    validKey = await apiKeyManager.testApiKey(key);
+    console.log('🔥 Stored key valid:', validKey);
+  }
+
+  if (validKey) {
+    console.log('🔥 API key valid, setting isAppReady = true');
     isAppReady = true;
 
     // Only create tray if it doesn't exist
@@ -851,8 +860,7 @@ function checkApiKeyAndContinue() {
       createStartupModal();
     }
   } else {
-    console.log('🔥 No API key, showing API key setup');
-    // Show API key setup
+    console.log('🔥 Missing or invalid API key, showing setup window');
     createApiKeyWindow();
   }
 }
@@ -1153,7 +1161,7 @@ ipcMain.handle('is-muted', async () => {
   return await volumeControl.isMutedState();
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log('🔥 App ready event fired');
 
   // Load last used region if available
@@ -1165,7 +1173,7 @@ app.whenReady().then(() => {
 
   // Check API key first
   console.log('🔥 Calling checkApiKeyAndContinue');
-  checkApiKeyAndContinue();
+  await checkApiKeyAndContinue();
 });
 
 app.on('window-all-closed', () => {
