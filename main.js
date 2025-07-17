@@ -16,7 +16,7 @@ let tray = null;
 let mainWindow = null;
 let startupWindow = null;
 let apiKeyWindow = null;
-let regionSelectorWindow = null;
+let regionSelectorWindows = [];
 let regionOverlayWindow = null;
 let flashIndicatorWindow = null;
 let appConfig = null;
@@ -116,47 +116,109 @@ function createMainWindow() {
   // DO NOT show window automatically - only when user clicks tray
 }
 
-function createRegionSelector() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+function getVirtualBounds() {
+  const displays = screen.getAllDisplays();
+  const bounds = {
+    x: Math.min(...displays.map(d => d.bounds.x)),
+    y: Math.min(...displays.map(d => d.bounds.y)),
+    width: 0,
+    height: 0
+  };
+  const maxRight = Math.max(...displays.map(d => d.bounds.x + d.bounds.width));
+  const maxBottom = Math.max(...displays.map(d => d.bounds.y + d.bounds.height));
+  bounds.width = maxRight - bounds.x;
+  bounds.height = maxBottom - bounds.y;
+  return bounds;
+}
 
-  regionSelectorWindow = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    show: true,
-    fullscreen: true,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+// Helper to close all region selector windows
+function closeRegionSelectorWindows() {
+  regionSelectorWindows.forEach(win => {
+    if (win && !win.isDestroyed()) {
+      win.close();
     }
   });
+  regionSelectorWindows = [];
+}
 
-  regionSelectorWindow.loadFile('region-selector.html');
+function createRegionSelector() {
+  // If selector windows are already open, just focus them
+  if (regionSelectorWindows.some(win => !win.isDestroyed())) {
+    regionSelectorWindows.forEach(win => {
+      if (!win.isDestroyed()) {
+        win.focus();
+      }
+    });
+    return;
+  }
 
-  regionSelectorWindow.on('closed', () => {
-    regionSelectorWindow = null;
+  // Create one transparent selector window per display
+  const displays = screen.getAllDisplays();
+  regionSelectorWindows = [];
+
+  displays.forEach(display => {
+    const { bounds, scaleFactor } = display;
+    const displayWidth = bounds.width;
+    const displayHeight = bounds.height;
+
+    console.log('🖥️ Creating selector for display', display.id, {
+      bounds,
+      scaleFactor,
+      displayWidth,
+      displayHeight
+    });
+
+    const selectorWin = new BrowserWindow({
+      width: displayWidth,
+      height: displayHeight,
+      x: bounds.x,
+      y: bounds.y,
+      show: true,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      movable: false,
+      enableLargerThanScreen: false,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    });
+
+    // Ensure window covers the full logical bounds of the display
+    selectorWin.setBounds(bounds);
+
+    selectorWin.loadFile('region-selector.html');
+
+    // No zoomFactor applied; content runs at native DIP scale for transparency stability
+
+    selectorWin.on('closed', () => {
+      regionSelectorWindows = regionSelectorWindows.filter(w => w !== selectorWin);
+    });
+
+    selectorWin.setAlwaysOnTop(true, 'screen-saver');
+    selectorWin.focus();
+
+    regionSelectorWindows.push(selectorWin);
   });
-
-  // Focus the window
-  regionSelectorWindow.focus();
-  regionSelectorWindow.setAlwaysOnTop(true, 'screen-saver');
 }
 
 function createRegionOverlay() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.bounds;
+  if (regionOverlayWindow && !regionOverlayWindow.isDestroyed()) {
+    regionOverlayWindow.close();
+  }
+
+  const vb = getVirtualBounds();
 
   regionOverlayWindow = new BrowserWindow({
-    width: width,
-    height: height,
-    x: primaryDisplay.bounds.x,
-    y: primaryDisplay.bounds.y,
+    width: vb.width,
+    height: vb.height,
+    x: vb.x,
+    y: vb.y,
     show: true,
     frame: false,
     transparent: true,
@@ -164,6 +226,7 @@ function createRegionOverlay() {
     skipTaskbar: true,
     resizable: false,
     focusable: false,
+    enableLargerThanScreen: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -178,7 +241,6 @@ function createRegionOverlay() {
     regionOverlayWindow = null;
   });
 
-  // Update overlay with current region
   if (currentRegion) {
     regionOverlayWindow.webContents.once('did-finish-load', () => {
       regionOverlayWindow.webContents.send('update-region', currentRegion);
@@ -367,7 +429,7 @@ function createTray() {
     {
       label: 'Quit',
       click: () => {
-        app.quit(); // Direct quit from tray
+        cleanupAndExit(true);
       }
     }
   ]);
@@ -549,6 +611,31 @@ async function showQuitDialog() {
 
 // Handle region selection
 ipcMain.on('region-selected', (event, region) => {
+  const displays = screen.getAllDisplays();
+
+  // Convert physical coordinates back to DIP for comparison against bounds
+  const findContainingDisplay = () => {
+    for (const d of displays) {
+      const dipX = region.x / d.scaleFactor;
+      const dipY = region.y / d.scaleFactor;
+
+      if (dipX >= d.bounds.x && dipX < d.bounds.x + d.bounds.width &&
+        dipY >= d.bounds.y && dipY < d.bounds.y + d.bounds.height) {
+        return d;
+      }
+    }
+    return null;
+  };
+
+  const containingDisplay = findContainingDisplay();
+
+  if (containingDisplay) {
+    region.displayIndex = displays.indexOf(containingDisplay);
+  } else {
+    // Fallback to primary display index 0
+    region.displayIndex = 0;
+  }
+
   currentRegion = region; // Update currentRegion
 
   // Save last used region
@@ -557,9 +644,7 @@ ipcMain.on('region-selected', (event, region) => {
   setScreenRegion(region);
   updateTrayMenu();
 
-  if (regionSelectorWindow) {
-    regionSelectorWindow.close();
-  }
+  closeRegionSelectorWindows();
 
   // Create or update overlay
   if (regionOverlayWindow) {
@@ -589,9 +674,7 @@ ipcMain.on('region-selected', (event, region) => {
 
 // Handle region selection cancellation
 ipcMain.on('region-selection-cancelled', () => {
-  if (regionSelectorWindow) {
-    regionSelectorWindow.close();
-  }
+  closeRegionSelectorWindows();
 
   // If this was during startup, quit the app
   if (!appConfig || !getSessionData().captureCount) {
@@ -1052,23 +1135,42 @@ app.on('activate', () => {
   }
 });
 
+// Helper to fully clean up and exit the app
+function cleanupAndExit(force = false) {
+  try {
+    console.log('🧹 Performing final cleanup before exit');
+
+    // Stop narrator interval
+    stopNarrator();
+
+    // Destroy tray
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+
+    // Close auxiliary windows
+    [regionOverlayWindow, flashIndicatorWindow, ...regionSelectorWindows].forEach(win => {
+      if (win && !win.isDestroyed()) {
+        win.destroy();
+      }
+    });
+
+    // Additional timers / handles can be cleared here if needed
+  } catch (err) {
+    console.error('Cleanup error:', err);
+  } finally {
+    // Force exit if requested (Windows sometimes keeps the process alive)
+    if (force) {
+      console.log('🛑 Force-exiting Electron process');
+      app.exit(0); // equals process.exit(0) but safer in Electron
+    }
+  }
+}
+
 // Handle app quit
 app.on('before-quit', (event) => {
-  if (tray) {
-    tray.destroy();
-  }
-
-  // Close overlay window
-  if (regionOverlayWindow) {
-    regionOverlayWindow.close();
-  }
-
-  // Close flash indicator window
-  if (flashIndicatorWindow) {
-    flashIndicatorWindow.close();
-  }
-
-  stopNarrator();
+  cleanupAndExit();
 });
 
 // Helper function to show main window

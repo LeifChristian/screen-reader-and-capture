@@ -13,6 +13,7 @@ import { app } from 'electron';
 import apiKeyManager from './api-key-manager.js';
 import settingsManager from './settings-manager.js';
 import { BrowserWindow } from 'electron';
+import { screen } from 'electron';
 
 dotenv.config();
 
@@ -165,25 +166,46 @@ async function takeScreenshot() {
         let img;
 
         if (appConfig.region) {
-            // Take full screen screenshot first, then crop to region
-            const fullScreenImg = await screenshot({ format: 'png' });
+            // Determine target display index and bounds
+            const displays = screen.getAllDisplays();
+            const targetIndex = appConfig.region.displayIndex ?? 0;
+            const targetDisplay = displays[targetIndex] || displays[0];
 
-            // Use sharp or canvas to crop the image
+            // Capture only the target display to minimise memory
+            const fullScreenImg = await screenshot({ format: 'png', screen: targetIndex });
+
+            // Translate display bounds (which are DIP) to physical pixels using the display scale factor
+            const physBoundsX = Math.round(targetDisplay.bounds.x * targetDisplay.scaleFactor);
+            const physBoundsY = Math.round(targetDisplay.bounds.y * targetDisplay.scaleFactor);
+
+            // Coordinates relative to that display in physical pixels
+            const cropLeft = appConfig.region.x - physBoundsX;
+            const cropTop = appConfig.region.y - physBoundsY;
+
+            // Ensure crop rectangle stays inside the captured image bounds to avoid sharp errors
+            const meta = await sharp(fullScreenImg).metadata();
+
+            const safeLeft = Math.max(0, cropLeft);
+            const safeTop = Math.max(0, cropTop);
+            const safeWidth = Math.min(appConfig.region.width, meta.width - safeLeft);
+            const safeHeight = Math.min(appConfig.region.height, meta.height - safeTop);
+
             img = await sharp(fullScreenImg)
                 .extract({
-                    left: appConfig.region.x,
-                    top: appConfig.region.y,
-                    width: appConfig.region.width,
-                    height: appConfig.region.height
+                    left: safeLeft,
+                    top: safeTop,
+                    width: safeWidth,
+                    height: safeHeight
                 })
                 .png()
                 .toBuffer();
 
-            logger.info(`Regional screenshot captured: ${appConfig.region.width}x${appConfig.region.height} at (${appConfig.region.x}, ${appConfig.region.y})`);
+            logger.info(`Regional screenshot captured (display ${targetIndex}): ${appConfig.region.width}x${appConfig.region.height} at (${appConfig.region.x}, ${appConfig.region.y})`);
         } else {
             // Take full screen screenshot
-            img = await screenshot({ format: 'png' });
-            logger.info('Full screen screenshot captured');
+            // Capture primary display if multiple
+            img = await screenshot({ format: 'png', screen: 0 });
+            logger.info('Primary display screenshot captured');
         }
 
         fs.writeFileSync(filePath, img);

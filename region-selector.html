@@ -315,8 +315,8 @@
         const scaleFactor = window.devicePixelRatio || 1;
 
         const region = {
-          x: Math.round(currentSelection.x * scaleFactor),
-          y: Math.round(currentSelection.y * scaleFactor),
+          x: Math.round((currentSelection.x + window.screenX) * scaleFactor),
+          y: Math.round((currentSelection.y + window.screenY) * scaleFactor),
           width: Math.round(currentSelection.width * scaleFactor),
           height: Math.round(currentSelection.height * scaleFactor),
         };
