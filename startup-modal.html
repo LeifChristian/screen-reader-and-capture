@@ -51,6 +51,7 @@
         border-radius: 12px 12px 0 0;
         text-align: center;
         flex-shrink: 0;
+        position: relative;
       }
 
       .modal-header h2 {
@@ -62,6 +63,27 @@
       .modal-header p {
         opacity: 0.9;
         font-size: 14px;
+      }
+
+      .close-button {
+        position: absolute;
+        top: 16px;
+        right: 20px;
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        opacity: 0.7;
+      }
+
+      .close-button:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
       }
 
       .modal-body {
@@ -319,6 +341,9 @@
       <div class="modal-header">
         <h2>🎙️ Screen Narrator Setup</h2>
         <p>Choose your monitoring mode to get started</p>
+        <button class="close-button" onclick="closeModal()" title="Close">
+          ×
+        </button>
       </div>
 
       <div class="modal-body">
@@ -542,6 +567,10 @@
 
       function cancelSetup() {
         ipcRenderer.send("cancel-setup");
+        window.close();
+      }
+
+      function closeModal() {
         window.close();
       }
 

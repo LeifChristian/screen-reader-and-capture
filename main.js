@@ -1,10 +1,12 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, screen } from 'electron';
 import path from 'path';
 import dotenv from 'dotenv';
-import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion, setCaptureFrequency, getCaptureFrequency } from './screen-narrator.js';
+import fetch from 'node-fetch';
+import { startNarrator, stopNarrator, exportSession, cleanupSession, getSessionData, setAppConfig, setScreenRegion, setCaptureFrequency, getCaptureFrequency, getWebhookHealthStatus } from './screen-narrator.js';
 import apiKeyManager from './api-key-manager.js';
 import sessionManager from './session-manager.js';
 import settingsManager from './settings-manager.js';
+import volumeControl from './volume-control.js';
 
 dotenv.config();
 
@@ -22,6 +24,8 @@ let currentRegion = null;
 let isAppReady = false;
 
 function createStartupModal() {
+  console.log('🔥 createStartupModal() called');
+
   startupWindow = new BrowserWindow({
     width: 550,
     height: 650,
@@ -35,6 +39,8 @@ function createStartupModal() {
       contextIsolation: false
     }
   });
+
+  console.log('🔥 Startup modal created');
 
   startupWindow.loadFile('startup-modal.html');
 
@@ -67,12 +73,14 @@ function createApiKeyWindow() {
 }
 
 function createMainWindow() {
+  console.log('🔥 createMainWindow() called');
+
   const savedBounds = settingsManager.getWindowBounds();
 
   mainWindow = new BrowserWindow({
     width: savedBounds.width,
     height: savedBounds.height,
-    show: false, // Don't show window initially
+    show: false, // Never show automatically
     webPreferences: {
       preload: path.join(process.cwd(), 'preload.js'),
       nodeIntegration: true,
@@ -80,10 +88,13 @@ function createMainWindow() {
     }
   });
 
+  console.log('🔥 BrowserWindow created, show: false');
+
   // Make mainWindow globally accessible for the narrator
   global.mainWindow = mainWindow;
 
   mainWindow.loadFile('narrator.html');
+  console.log('🔥 Loading narrator.html');
 
   // Save window bounds when resized or moved
   mainWindow.on('resize', () => {
@@ -101,6 +112,8 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     global.mainWindow = null;
   });
+
+  // DO NOT show window automatically - only when user clicks tray
 }
 
 function createRegionSelector() {
@@ -174,6 +187,15 @@ function createRegionOverlay() {
 }
 
 function createTray() {
+  // Destroy existing tray if it exists
+  if (tray) {
+    console.log('🔥 Destroying existing tray');
+    tray.destroy();
+    tray = null;
+  }
+
+  console.log('🔥 Creating new tray');
+
   // Create a simple tray icon
   const trayIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
 
@@ -256,30 +278,51 @@ function createTray() {
       type: 'separator'
     },
     {
+      label: '🔊 Volume Control',
+      click: () => {
+        volumeControl.showVolumeSlider();
+      }
+    },
+    {
       label: 'Show Dashboard',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createMainWindow();
-        }
+        showMainWindow();
       }
     },
     {
       label: '📁 File Manager',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
+        showMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('show-file-manager');
-        } else {
-          createMainWindow();
-          mainWindow.webContents.once('did-finish-load', () => {
-            mainWindow.webContents.send('show-file-manager');
-          });
         }
       }
+    },
+    {
+      type: 'separator'
+    },
+    {
+      label: 'Quick Access:',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Left Click → Dashboard',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Right Click → Volume',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      label: '  Double Click → Mute/Unmute',
+      type: 'normal',
+      enabled: false
+    },
+    {
+      type: 'separator'
     },
     {
       label: '🔑 API Key Settings',
@@ -318,7 +361,7 @@ function createTray() {
     {
       label: 'Quit',
       click: () => {
-        showQuitDialog();
+        app.quit(); // Direct quit from tray
       }
     }
   ]);
@@ -330,25 +373,36 @@ function createTray() {
   tray.setToolTip(tooltipText);
   tray.setContextMenu(contextMenu);
 
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    } else {
-      createMainWindow();
-    }
+  // Left click to show dashboard
+  tray.on('click', () => {
+    showMainWindow();
   });
+
+  // Right click to show volume slider
+  tray.on('right-click', () => {
+    volumeControl.showVolumeSlider();
+  });
+
+  // Double click to toggle mute
+  tray.on('double-click', async () => {
+    await volumeControl.toggleMute();
+  });
+
+  console.log('🔥 Tray created successfully');
 }
 
 // Update tray menu when region changes
 function updateTrayMenu() {
   if (tray) {
+    console.log('🔥 Updating tray menu');
     createTray(); // Recreate tray with updated menu
   }
 }
 
 // Handle startup configuration
 function handleStartupConfig(config) {
+  console.log('🔥 handleStartupConfig called with:', config);
+
   appConfig = config;
 
   // Save last used mode
@@ -362,9 +416,13 @@ function handleStartupConfig(config) {
     startupWindow.close();
   }
 
-  // Create main window and tray
+  console.log('🔥 About to create main window and tray');
+
+  // Create main window and tray - but DON'T show window
   createMainWindow();
   createTray();
+
+  console.log('🔥 Main window and tray created - app running in tray');
 
   // Start the narrator
   startNarrator();
@@ -372,6 +430,8 @@ function handleStartupConfig(config) {
 
 // Handle startup with region selection
 function handleStartupWithRegionSelection(config) {
+  console.log('🔥 handleStartupWithRegionSelection called with:', config);
+
   appConfig = config;
 
   // Save last used mode
@@ -385,9 +445,11 @@ function handleStartupWithRegionSelection(config) {
     startupWindow.close();
   }
 
-  // Create main window and tray first
+  // Create main window and tray first - but DON'T show window
   createMainWindow();
   createTray();
+
+  console.log('🔥 Main window created, now showing region selector');
 
   // Show region selector
   createRegionSelector();
@@ -444,6 +506,13 @@ async function showQuitDialog() {
   const sessionData = getSessionData();
 
   if (sessionData.captureCount === 0) {
+    // No session data, quit immediately
+    app.quit();
+    return;
+  }
+
+  // Only show dialog if we have a main window to show it in
+  if (!mainWindow) {
     app.quit();
     return;
   }
@@ -627,12 +696,27 @@ ipcMain.handle('export-session-with-picker', async (event, sessionId, includeScr
 
 // Check API key and continue app initialization
 function checkApiKeyAndContinue() {
+  console.log('🔥 checkApiKeyAndContinue() called');
+  console.log('🔥 IS_DEV:', IS_DEV);
+  console.log('🔥 hasStoredKey:', apiKeyManager.hasStoredKey());
+
   if (IS_DEV || apiKeyManager.hasStoredKey()) {
+    console.log('🔥 API key check passed, setting isAppReady = true');
     isAppReady = true;
+
+    // Only create tray if it doesn't exist
     if (!tray) {
+      console.log('🔥 Creating tray (first time)');
       createTray();
     }
+
+    // If we have an API key but no startup modal, show it
+    if (!startupWindow && !appConfig) {
+      console.log('🔥 No startup modal and no config, creating startup modal');
+      createStartupModal();
+    }
   } else {
+    console.log('🔥 No API key, showing API key setup');
     // Show API key setup
     createApiKeyWindow();
   }
@@ -706,6 +790,105 @@ ipcMain.handle('reset-settings', () => {
   }
 });
 
+ipcMain.handle('start-new-session', () => {
+  try {
+    // Hide main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+
+    // Create startup modal
+    createStartupModal();
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handlers for webhook management
+ipcMain.handle('get-webhook-settings', () => {
+  try {
+    return { success: true, settings: settingsManager.getWebhookSettings() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-webhook-health', () => {
+  try {
+    return { success: true, health: getWebhookHealthStatus() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('set-webhook-settings', (event, webhookSettings) => {
+  try {
+    const settings = settingsManager.setWebhookSettings(webhookSettings);
+    return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('test-webhook', async (event, webhookUrl) => {
+  try {
+    const testPayload = {
+      eventType: 'TEST',
+      data: {
+        description: 'This is a test webhook from Screen Narrator',
+        screenshotPath: null,
+        captureNumber: 0,
+        sessionId: 'test-session',
+        eventTimestamp: new Date().toISOString(),
+        mode: 'test'
+      }
+    };
+
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for tests
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Screen-Narrator-Webhook/1.0'
+        },
+        body: JSON.stringify(testPayload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (jsonError) {
+          responseData = { status: 'received', note: 'Non-JSON response' };
+        }
+        return { success: true, status: response.status, response: responseData };
+      } else {
+        const errorData = await response.text();
+        return { success: false, status: response.status, error: errorData };
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      if (fetchError.name === 'AbortError') {
+        return { success: false, error: 'Request timeout (10 seconds)' };
+      }
+
+      return { success: false, error: fetchError.message };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 function createFlashIndicator() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.bounds;
@@ -754,14 +937,35 @@ ipcMain.on('hide-flash-indicator', () => {
   }
 });
 
+// Volume control IPC handlers
+ipcMain.handle('get-volume', async () => {
+  return await volumeControl.getVolume();
+});
+
+ipcMain.handle('set-volume', async (event, volume) => {
+  return await volumeControl.setVolume(volume);
+});
+
+ipcMain.handle('toggle-mute', async () => {
+  return await volumeControl.toggleMute();
+});
+
+ipcMain.handle('is-muted', async () => {
+  return await volumeControl.isMutedState();
+});
+
 app.whenReady().then(() => {
+  console.log('🔥 App ready event fired');
+
   // Load last used region if available
   const lastRegion = settingsManager.getLastUsedRegion();
   if (lastRegion) {
+    console.log('🔥 Loading last used region:', lastRegion);
     currentRegion = lastRegion;
   }
 
   // Check API key first
+  console.log('🔥 Calling checkApiKeyAndContinue');
   checkApiKeyAndContinue();
 });
 
@@ -796,3 +1000,18 @@ app.on('before-quit', (event) => {
 
   stopNarrator();
 });
+
+// Helper function to show main window
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+    // Wait for window to be ready before showing
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+      mainWindow.focus();
+    });
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
