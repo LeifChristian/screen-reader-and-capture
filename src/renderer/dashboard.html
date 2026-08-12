@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Screen Narrator Dashboard</title>
+    <link rel="stylesheet" href="static/dashboard.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="card header">
+        <h1>Screen Narrator</h1>
+        <p>AI-powered live screen description with conversation history</p>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-indicator">
+          <div class="pulse"></div>
+          <span>Narrator Active</span>
+          <div class="speaking-indicator" id="speakingIndicator">
+            <div class="sound-waves">
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+              <div class="sound-wave"></div>
+            </div>
+            <span>Speaking...</span>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" onclick="exportText()">📝 Export Text</button>
+          <button class="btn" onclick="exportFull()">📦 Export Full</button>
+          <button class="btn" onclick="clearSession()">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="card session-info">
+        <h4>Session Information</h4>
+        <div class="session-stats">
+          <span>Session ID: <strong id="sessionId">Loading...</strong></span>
+          <span>Captures: <strong id="captureCount">0</strong></span>
+          <span>Started: <strong id="sessionStart">Loading...</strong></span>
+        </div>
+      </div>
+
+      <div class="captures-container" id="capturesContainer">
+        <div class="empty-state">
+          <h3>🔄 Initializing Screen Narrator...</h3>
+          <p>The first capture will appear here shortly</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="static/dashboard.js"></script>
+  </body>
+</html>

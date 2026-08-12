@@ -94,4 +94,10 @@ jspm_packages/
 .yarn-integrity
 
 # Test files
-test-api.js 
+test-api.js
+
+# Runtime config with secrets
+.runtime-config.json
+
+# macOS app bundle
+*.app/

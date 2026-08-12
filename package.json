@@ -1,10 +1,12 @@
 {
-  "name": "electron-queue-watcher",
-  "version": "1.0.0",
-  "main": "main.js",
+  "name": "screen-narrator",
+  "version": "2.0.0",
+  "description": "AI-powered screen narrator with OpenAI Vision",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "setup": "node setup.js"
+    "dev": "NODE_ENV=development electron .",
+    "test": "node --test src/**/*.test.js"
   },
   "type": "module",
   "dependencies": {
