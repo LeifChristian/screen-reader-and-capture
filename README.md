@@ -123,8 +123,3 @@ const INTERVAL_MS = 30 * 1000; // 30 seconds
 - On macOS, the `say` command should work out of the box
 - On Windows, ensure a compatible voice is installed
 - Check the session log for TTS errors
-
-## Notes
-
-- The app sends screenshots to OpenAI's API. Be mindful of privacy and API costs.
-- The legacy queue watcher was designed for Windows but works on macOS with some limitations.
