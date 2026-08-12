@@ -1,170 +1,130 @@
-# 🔍 Queue Watcher - Electron Background Monitor
+# 🎙️ Screen Narrator
 
-An Electron application that runs in the background, monitors your screen for queue numbers, and alerts you when your position reaches critical thresholds.
+An Electron desktop app that uses OpenAI's vision models to watch your screen, describe what it sees, and speak the description aloud. Includes a legacy queue-watcher mode for extracting queue numbers from on-screen text.
 
 ## ✨ Features
 
-- **Background Monitoring**: Runs in system tray, continuously watching your screen
-- **AI-Powered OCR**: Uses OpenAI Vision API to extract queue numbers from screenshots
-- **Smart Alerts**: Notifications at queue positions 10, 9, 8, and 5
-- **Sound Notifications**: Plays your custom sound file when alerts trigger
-- **Database Logging**: All queue data logged to SQLite database
-- **Windows Optimized**: Designed specifically for Windows environment
+- **AI-Powered Screen Narration**: Captures your screen and describes it using GPT-4o
+- **Text-to-Speech**: Speaks descriptions aloud using your system's TTS
+- **Conversation History**: Maintains context across recent captures for continuity
+- **Session Export**: Save descriptions as text or descriptions + screenshots as a ZIP
+- **macOS & Windows Support**: Runs on macOS and Windows (Linux partially supported)
+- **Setup Wizard**: Enter your OpenAI API key through a simple UI on first launch
+- **Legacy Queue Watcher**: Optional mode to monitor a queue number and play alerts at thresholds
 
 ## 🚀 Setup Instructions
 
 ### 1. Prerequisites
 
-Make sure you have:
-
 - **Node.js** (v18 or higher)
-- **OpenAI API Key** (with GPT-4 Vision access)
-- **Windows 10/11** (tested environment)
+- **OpenAI API Key** with vision model access (e.g. `gpt-4o`)
 
 ### 2. Installation
 
 ```bash
-# Install dependencies
+git clone https://github.com/LeifChristian/screen-reader-and-capture.git
+cd screen-reader-and-capture
+git checkout reader
 npm install
-
-# Run setup script
-npm run setup
 ```
 
-### 3. Configuration
-
-The setup script will check for:
-
-- ✅ `sound.wav` file in the project directory
-- ✅ Valid OpenAI API key in `.env` file
-- ✅ Sound playback functionality
-
-### 4. Start the Application
+### 3. Start the Application
 
 ```bash
 npm start
 ```
 
-The app will:
+On first launch, a setup window will ask for your OpenAI API key. The key is stored locally in `.runtime-config.json`.
 
-- Launch in the background (system tray)
-- Begin monitoring your screen every 30 seconds
-- Show a dashboard window (can be minimized)
+On macOS, you can also launch the bundled app:
+
+```bash
+open ScreenReader.app
+```
 
 ## 🎯 How It Works
 
-1. **Screenshot Capture**: Takes periodic screenshots of your entire screen
-2. **AI Processing**: Sends images to OpenAI Vision API to extract queue numbers
-3. **Alert Logic**: Triggers notifications when queue position reaches 10, 9, 8, or 5
-4. **Sound Alerts**: Plays `sound.wav` file for each alert
-5. **Data Logging**: Saves all queue data to `queue_log.db` and `queue-watcher.log`
+1. **Screenshot Capture**: Takes a screenshot of your screen every 60 seconds
+2. **AI Processing**: Sends the image to OpenAI Vision API (GPT-4o)
+3. **Description**: Receives a natural-language description of what's on screen
+4. **Text-to-Speech**: Speaks the description aloud
+5. **Logging**: Saves descriptions and screenshots to a per-session folder
 
-## 📊 Dashboard Features
+## 📊 Dashboard
 
-- **Real-time Status**: Current queue position and last check time
-- **Alert Settings**: Shows configured notification thresholds
-- **Recent Logs**: History of detected queue numbers
-- **Controls**: Test sound, manual check, clear logs
+The main dashboard shows:
 
-## 🔧 System Tray Options
-
-Right-click the tray icon to access:
-
-- **Show Dashboard**: Open the main window
-- **Status**: Current monitoring status
-- **Quit**: Exit the application
-
-## 📁 Files Generated
-
-- `queue_log.db` - SQLite database with all queue data
-- `queue-watcher.log` - Application log file
-- `screenshot.png` - Latest screenshot (temporary)
+- Session ID and capture count
+- Latest screenshot
+- Description history (newest first)
+- Export options (text or text + screenshots)
 
 ## ⚙️ Configuration
 
-### Alert Thresholds
+### Capture Interval
 
-Currently set to: **10, 9, 8, 5**
-
-To modify, edit the `ALERT_NUMBERS` array in `capture.js`:
+Edit `INTERVAL_MS` in `screen-narrator.js`:
 
 ```javascript
-const ALERT_NUMBERS = [10, 9, 8, 5]; // Customize these values
+const INTERVAL_MS = 60 * 1000; // 60 seconds
+```
+
+### Voice / TTS
+
+On Windows, the app uses `Microsoft Zira Desktop`. On macOS/Linux it uses the default system voice. Edit `speakText()` in `screen-narrator.js` to change the voice or speed.
+
+## 🔧 Legacy Queue Watcher
+
+The original queue-watcher functionality is still available in `capture.js`. It monitors your screen for a queue number and plays `sound.wav` when the number hits configured thresholds.
+
+To use it, wire up `capture.js` in your own main process or modify `main.js` to start the queue watcher instead of the narrator.
+
+### Alert Thresholds
+
+Edit the `ALERT_NUMBERS` array in `capture.js`:
+
+```javascript
+const ALERT_NUMBERS = [10, 4, 3];
 ```
 
 ### Check Interval
 
-Default: 30 seconds (for testing)
-
-To modify, edit `INTERVAL_MS` in `capture.js`:
+Edit `INTERVAL_MS` in `capture.js`:
 
 ```javascript
-const INTERVAL_MS = 60 * 1000; // 30 seconds
+const INTERVAL_MS = 30 * 1000; // 30 seconds
 ```
 
-## 🔊 Sound Requirements
+## 📁 Files Generated
 
-- Place your `sound.wav` file in the project root directory
-- Supported formats: WAV (recommended for Windows)
-- The setup script will test sound playback
+- `sessions/<session-id>/screenshots/` - Captured screenshots
+- `sessions/<session-id>/descriptions.txt` - Text log of all descriptions
+- `sessions/<session-id>/session.log` - Application log
+- `.runtime-config.json` - Locally stored OpenAI API key
+- `queue_log.db` - SQLite database for queue watcher mode
+- `queue-watcher.log` - Queue watcher log
 
 ## 🛠️ Troubleshooting
 
-### Common Issues
+### Window doesn't appear
 
-1. **Sound Not Playing**
+- On macOS, use `open ScreenReader.app` instead of `npm start` for proper GUI activation
+- Check the Dock for an Electron icon and click it
+- Ensure screen recording permissions are granted in **System Settings → Privacy & Security → Screen Recording**
 
-   - Ensure `sound.wav` exists in project directory
-   - Check Windows audio settings
-   - Run `npm run setup` to test sound
+### No descriptions
 
-2. **No Queue Numbers Detected**
+- Verify your OpenAI API key is valid and has credits
+- Check `sessions/<session-id>/session.log` for API errors
+- Ensure you have internet access
 
-   - Verify OpenAI API key is valid
-   - Check if queue numbers are clearly visible on screen
-   - Review logs in `queue-watcher.log`
+### TTS not working
 
-3. **Screenshot Issues**
-   - Ensure Windows allows screen capture
-   - Check Windows Privacy settings for screen recording
-   - Try running as administrator
+- On macOS, the `say` command should work out of the box
+- On Windows, ensure a compatible voice is installed
+- Check the session log for TTS errors
 
-### Logs and Debugging
+## 📝 Notes
 
-- Check `queue-watcher.log` for detailed application logs
-- Database logs are in `queue_log.db` (can be viewed with SQLite browser)
-- Console logs appear in the Electron DevTools
-
-## 📱 Windows Permissions
-
-The app may need permissions for:
-
-- **Screen capture** (Windows Privacy Settings)
-- **Sound playback** (Windows Audio Settings)
-- **File system access** (for logging and database)
-
-## 🔄 Updates and Maintenance
-
-- Queue data is automatically archived in the database
-- Log files rotate to prevent disk space issues
-- Screenshots are temporary and overwritten each check
-
-## 🆘 Support
-
-If you encounter issues:
-
-1. Run `npm run setup` to verify configuration
-2. Check the log files for error messages
-3. Ensure all permissions are granted
-4. Verify OpenAI API key has sufficient credits
-
-## 🎮 Usage Tips
-
-- **Minimize to tray**: Close the dashboard window to run purely in background
-- **Test alerts**: Use the "Test Sound" button to verify audio works
-- **Monitor logs**: Keep an eye on the Recent Logs section for issues
-- **Adjust timing**: Modify check interval based on your queue's update frequency
-
----
-
-**Note**: This application is designed for Windows environments and requires an active OpenAI API key with GPT-4 Vision access.
+- The app sends screenshots to OpenAI's API. Be mindful of privacy and API costs.
+- The legacy queue watcher was designed for Windows but works on macOS with some limitations.
